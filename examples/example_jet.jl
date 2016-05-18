@@ -1,4 +1,4 @@
-using SchroedingersSmoke
+using SchroedingersSmoke, ParallelAccelerator
 
 # example_jet
 # An example of incompressible Schroedinger flow producing a jet.
@@ -32,7 +32,7 @@ const n_particles = 50;   # number of particles
 isf = ISF(TorusDEC(vol_size..., vol_res...), hbar, dt)
 
 # Set nozzle
-isJet = land(
+const isJet = land(
     abs(isf.t.px - nozzle_cen[1]).<=nozzle_len/2,
     (isf.t.py - nozzle_cen[2]).^2+(isf.t.pz - nozzle_cen[3]).^2 .<= nozzle_rad.^2
 )
@@ -50,10 +50,10 @@ phase = kvec[1].*isf.t.px + kvec[2].*isf.t.py + kvec[3].*isf.t.pz;
 for iter = 1:10
     amp1 = abs(psi1)
     amp2 = abs(psi2)
-    psi1 = 1im * psi1
-    psi2 = 1im * psi2
-    psi1[isJet] = amp1[isJet].*exp(1im*phase[isJet])
-    psi2[isJet] = amp2[isJet].*exp(1im*phase[isJet])
+    psi1 = 1.im * psi1
+    psi2 = 1.im * psi2
+    psi1[isJet] = amp1[isJet].*exp(1.im*phase[isJet])
+    psi2[isJet] = amp2[isJet].*exp(1.im*phase[isJet])
     psi1, psi2 = PressureProject(isf, psi1, psi2)
 end
 
@@ -65,7 +65,7 @@ particle = Particles(Float32[], Float32[], Float32[])
 ## MAIN ITERATION
 itermax = ceil(tmax/dt);
 
-function iterate(particle, isf, psi1, psi2, iter, omega, isJet)
+@acc function iterate(particle, isf, psi1, psi2, iter, omega, isJet)
     t = iter*dt
     # incompressible Schroedinger flow
     psi1, psi2 = SchroedingerFlow(isf, psi1,psi2)
@@ -76,8 +76,8 @@ function iterate(particle, isf, psi1, psi2, iter, omega, isJet)
     phase = kvec[1].*isf.t.px + kvec[2].*isf.t.py + kvec[3].*isf.t.pz - omega*t;
     amp1 = abs(psi1);
     amp2 = abs(psi2);
-    psi1[isJet] = amp1[isJet].*exp(1im*phase[isJet])
-    psi2[isJet] = amp2[isJet].*exp(1im*phase[isJet])
+    psi1[isJet] = amp1[isJet].*exp(1.im*phase[isJet])
+    psi2[isJet] = amp2[isJet].*exp(1.im*phase[isJet])
     psi1, psi2 = PressureProject(isf, psi1, psi2)
 
     # particle birth
@@ -93,34 +93,35 @@ function iterate(particle, isf, psi1, psi2, iter, omega, isJet)
     vx,vy,vz = StaggeredSharp(isf.t,vx,vy,vz);
     StaggeredAdvect(particle, isf.t,vx,vy,vz,isf.dt);
     Keep(particle,
-        (particle.x .> 0) & (particle.x .< vol_size[1]) &
-        (particle.y .> 0) & (particle.y .< vol_size[2]) &
-        (particle.z .> 0) & (particle.z .< vol_size[3])
+        (particle.x .> 0f0) & (particle.x .< vol_size[1]) &
+        (particle.y .> 0f0) & (particle.y .< vol_size[2]) &
+        (particle.z .> 0f0) & (particle.z .< vol_size[3])
     )
 end
 #
-# using GLVisualize, GeometryTypes, GLWindow, GLAbstraction, Colors, GLFW
-# w=glscreen()
-# view(
-#     visualize(
-#         (Sphere(Point2f0(0), 0.005f0), (Float32[0], Float32[0], Float32[0])),
-#         color=RGBA{Float32}(0,0,0,0.3), billboard=true
-#     ),
-#     camera=:perspective
-# )
-# robj = renderlist(w)[1]
-# gpu_x, gpu_y, gpu_z = robj[:position_x], robj[:position_y], robj[:position_z]
+using GLVisualize, GeometryTypes, GLWindow, GLAbstraction, Colors, GLFW
+w=glscreen()
+view(
+    visualize(
+        (Sphere(Point2f0(0), 0.005f0), (Float32[0], Float32[0], Float32[0])),
+        color=RGBA{Float32}(0,0,0,0.3), billboard=true
+    ),
+    camera=:perspective
+)
 
+robj = renderlist(w)[1]
 
+gpu_x, gpu_y, gpu_z = robj[:position_x], robj[:position_y], robj[:position_z]
 
-for iter = 1:40
-    # isopen(w) || break
+for iter = 1:itermax
+    isopen(w) || break
     @time iterate(particle, isf, psi1, psi2, iter, omega, isJet)
-    # update!(gpu_x, particle.x)
-    # update!(gpu_y, particle.y)
-    # update!(gpu_z, particle.z)
-    # GLWindow.render_frame(w)
-    # GLFW.PollEvents()
-end# empty!(w)
-# yield()
-# GLFW.DestroyWindow(GLWindow.nativewindow(w))
+    update!(gpu_x, particle.x)
+    update!(gpu_y, particle.y)
+    update!(gpu_z, particle.z)
+    GLWindow.render_frame(w)
+    GLFW.PollEvents()
+end
+empty!(w)
+yield()
+GLFW.DestroyWindow(GLWindow.nativewindow(w))

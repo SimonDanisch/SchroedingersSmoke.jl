@@ -9,11 +9,7 @@ type Particles
     z::Vector{Float32} # array of positions
 end
 
-"""
- advect particle positions using RK4 in a grid torus with
- staggered velocity vx,vy,vz, for dt period of time
-"""
-@acc function StaggeredAdvect(particle, torus, vx, vy, vz, dt)
+function StaggeredAdvect(particle, torus, vx, vy, vz, dt)
     k1x,k1y,k1z = StaggeredVelocity(
         particle.x,particle.y,particle.z,
         torus,vx,vy,vz
@@ -43,44 +39,42 @@ function Keep(particle, ind)
     particle.z = particle.z[ind]
 end
 
-"""
- evaluates velocity at (px,py,pz) in the grid torus with staggered
- velocity vector field vx,vy,vz
-"""
-@acc function StaggeredVelocity(px,py,pz,torus,vx,vy,vz)
+function StaggeredVelocity(pxf,pyf,pzf,torus,vx,vy,vz)
     @inbounds begin
-        px = mod(px, torus.sizex)
-        py = mod(py, torus.sizey)
-        pz = mod(pz, torus.sizez)
+    px = mod(pxf, torus.sizex)
+    py = mod(pyf, torus.sizey)
+    pz = mod(pzf, torus.sizez)
 
-        ix = floor(Int, px/torus.dx) + 1
-        iy = floor(Int, py/torus.dy) + 1
-        iz = floor(Int, pz/torus.dz) + 1
-        ixp = mod(ix,torus.resx)+1
-        iyp = mod(iy,torus.resy)+1
-        izp = mod(iz,torus.resz)+1
+    ix = floor(Int, px/torus.dx) + 1
+    iy = floor(Int, py/torus.dy) + 1
+    iz = floor(Int, pz/torus.dz) + 1
+    ixp = mod(ix,torus.resx)+1
+    iyp = mod(iy,torus.resy)+1
+    izp = mod(iz,torus.resz)+1
 
-        res = (torus.resx,torus.resy,torus.resz)
-        ind0 = Int[sub2ind(res, x,y,z) for (x,y,z) in zip(ix,iy,iz)]
-        indxp = Int[sub2ind(res, x,y,z) for (x,y,z) in zip(ixp,iy,iz)]
-        indyp = Int[sub2ind(res, x,y,z) for (x,y,z) in zip(ix,iyp,iz)]
-        indzp = Int[sub2ind(res, x,y,z) for (x,y,z) in zip(ix,iy,izp)]
-        indxpyp = Int[sub2ind(res, x,y,z) for (x,y,z) in zip(ixp,iyp,iz)]
-        indypzp = Int[sub2ind(res, x,y,z) for (x,y,z) in zip(ix,iyp,izp)]
-        indxpzp = Int[sub2ind(res, x,y,z) for (x,y,z) in zip(ixp,iy,izp)]
+    res = (torus.resx,torus.resy,torus.resz)
+    n = length(ix)
+    @inbounds begin
+        ind0 = [sub2ind(res, ix[i],iy[i],iz[i])::Int for i=1:n]
+        indxp = [sub2ind(res, ixp[i],iy[i],iz[i])::Int for i=1:n]
+        indyp = [sub2ind(res, ix[i],iyp[i],iz[i])::Int for i=1:n]
+        indzp = [sub2ind(res, ix[i],iy[i],izp[i])::Int for i=1:n]
+        indxpyp = [sub2ind(res, ixp[i],iyp[i],iz[i])::Int for i=1:n]
+        indypzp = [sub2ind(res, ix[i],iyp[i],izp[i])::Int for i=1:n]
+        indxpzp = [sub2ind(res, ixp[i],iy[i],izp[i])::Int for i=1:n]
+    end
+    wx = px - (ix-1)*torus.dx
+    wy = py - (iy-1)*torus.dy
+    wz = pz - (iz-1)*torus.dz
 
-        wx = px - (ix-1)*torus.dx;
-        wy = py - (iy-1)*torus.dy;
-        wz = pz - (iz-1)*torus.dz;
+    ux = ((1-wz).*((1-wy).*vx[ind0 ]+wy.*vx[indyp  ]) +
+            wz .*((1-wy).*vx[indzp]+wy.*vx[indypzp]))
 
-        ux = (1-wz).*((1-wy).*vx[ind0 ]+wy.*vx[indyp  ]) +
-                wz .*((1-wy).*vx[indzp]+wy.*vx[indypzp]);
+    uy = ((1-wz).*((1-wx).*vy[ind0 ]+wx.*vy[indxp  ]) +
+            wz .*((1-wx).*vy[indzp]+wx.*vy[indxpzp]))
 
-        uy = (1-wz).*((1-wx).*vy[ind0 ]+wx.*vy[indxp  ]) +
-                wz .*((1-wx).*vy[indzp]+wx.*vy[indxpzp]);
-
-        uz = (1-wy).*((1-wx).*vz[ind0 ]+wx.*vz[indxp  ]) +
-                wy .*((1-wx).*vz[indyp]+wx.*vz[indxpyp]);
+    uz = ((1-wy).*((1-wx).*vz[ind0 ]+wx.*vz[indxp  ]) +
+            wy .*((1-wx).*vz[indyp]+wx.*vz[indxpyp]))
     end
     ux,uy,uz
 end
