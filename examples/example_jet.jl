@@ -1,4 +1,4 @@
-using SchroedingersSmoke, ParallelAccelerator
+using SchroedingersSmoke
 
 # example_jet
 # An example of incompressible Schroedinger flow producing a jet.
@@ -64,8 +64,7 @@ particle = Particles(Float32[], Float32[], Float32[])
 
 ## MAIN ITERATION
 itermax = ceil(tmax/dt);
-
-@acc function iterate(particle, isf, psi1, psi2, iter, omega, isJet)
+function iterate(particle, isf, psi1, psi2, iter, omega, isJet)
     t = iter*dt
     # incompressible Schroedinger flow
     psi1, psi2 = SchroedingerFlow(isf, psi1,psi2)

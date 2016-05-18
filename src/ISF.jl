@@ -61,7 +61,7 @@ function BuildSchroedinger(obj::ISF)
 end
 
 
-@acc function SchroedingerFlow(obj, psi1, psi2)
+function SchroedingerFlow(obj, psi1, psi2)
     psi1 = fftshift(fft(psi1)); psi2 = fftshift(fft(psi2));
     psi1 = psi1.*obj.SchroedingerMask;
     psi2 = psi2.*obj.SchroedingerMask;
@@ -70,7 +70,7 @@ end
 end
 
 
-@acc function PressureProject(obj, psi1, psi2)
+function PressureProject(obj, psi1, psi2)
     vx,vy,vz = VelocityOneForm(obj, psi1,psi2)
     div = Div(obj.t, vx,vy,vz)
     q = PoissonSolve(obj.t, div);
@@ -78,7 +78,7 @@ end
 end
 
 VelocityOneForm(obj, psi1, psi2) = VelocityOneForm(obj, psi1, psi2, 1.0)
-@acc function VelocityOneForm(obj, psi1, psi2, hbar)
+function VelocityOneForm(obj, psi1, psi2, hbar)
     ixp = mod(obj.t.ix, obj.t.resx) + 1;
     iyp = mod(obj.t.iy, obj.t.resy) + 1;
     izp = mod(obj.t.iz, obj.t.resz) + 1;
@@ -123,7 +123,7 @@ function AddCircle(obj, psi, center, normal, r, d)
 end
 
 
-@acc function GaugeTransform(psi1, psi2, q)
+function GaugeTransform(psi1, psi2, q)
     eiq = exp(1.im*q);
     psi1 = psi1.*eiq
     psi2 = psi2.*eiq
@@ -131,7 +131,7 @@ end
 end
 
 
-@acc function Hopf(psi1,psi2)
+function Hopf(psi1,psi2)
     a = real(psi1);
     b = imag(psi1);
     c = real(psi2);
@@ -142,7 +142,7 @@ end
     sx,sy,sz
 end
 
-@acc function Normalize(psi1,psi2)
+function Normalize(psi1,psi2)
     psi_norm = sqrt(abs(psi1).^2 + abs(psi2).^2);
     psi1 = psi1./psi_norm;
     psi2 = psi2./psi_norm;

@@ -163,7 +163,7 @@ function DerivativeOfOneForm(obj::TorusDEC,vx,vy,vz)
     wx,wy,wz
 end
 
-@acc function DerivativeOfTwoForm(obj::TorusDEC,wx,wy,wz)
+function DerivativeOfTwoForm(obj::TorusDEC,wx,wy,wz)
     ixp = mod(obj.ix, obj.resx) + 1
     iyp = mod(obj.iy, obj.resy) + 1
     izp = mod(obj.iz, obj.resz) + 1
@@ -173,7 +173,7 @@ end
     f
 end
 
-@acc function Div(obj::TorusDEC,vx,vy,vz)
+function Div(obj::TorusDEC,vx,vy,vz)
     ixm = mod(obj.ix-2, obj.resx) + 1
     iym = mod(obj.iy-2, obj.resy) + 1
     izm = mod(obj.iz-2, obj.resz) + 1
@@ -183,7 +183,7 @@ end
     f
 end
 
-@acc function Sharp(obj::TorusDEC,vx,vy,vz)
+function Sharp(obj::TorusDEC,vx,vy,vz)
     ixm = mod(obj.ix-2,obj.resx) + 1
     iym = mod(obj.iy-2,obj.resy) + 1
     izm = mod(obj.iz-2,obj.resz) + 1
@@ -193,7 +193,7 @@ end
     ux,uy,uz
 end
 
-@acc function StaggeredSharp(obj::TorusDEC,vx,vy,vz)
+function StaggeredSharp(obj::TorusDEC,vx,vy,vz)
     ux = vx.*(1./obj.dx)
     uy = vy.*(1./obj.dy)
     uz = vz.*(1./obj.dz)
@@ -201,7 +201,7 @@ end
 end
 
 
-@acc function PoissonSolve(obj, f)
+function PoissonSolve(obj, f)
     f = fft(f)
     sx = sin(3.1415926535897*(obj.iix-1)/obj.resx)/obj.dx
     sy = sin(3.1415926535897*(obj.iiy-1)/obj.resy)/obj.dy

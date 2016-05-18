@@ -1,7 +1,5 @@
 module SchroedingersSmoke
 
-using ParallelAccelerator
-
 # matlab compat functions
 _land(a, b) = a > 0 && b > 0
 function land(a, b)
@@ -9,7 +7,7 @@ function land(a, b)
 end
 ndgrid(v::AbstractVector) = copy(v)
 
-function ndgrid{T}(v1::AbstractVector{T}, v2::AbstractVector{T})
+function ndgrid(v1::AbstractVector, v2::AbstractVector)
     m, n = length(v1), length(v2)
     v1 = reshape(v1, m, 1)
     v2 = reshape(v2, 1, n)
