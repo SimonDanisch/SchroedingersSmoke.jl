@@ -38,9 +38,10 @@ function Keep(particle, ind)
     particle.y = particle.y[ind]
     particle.z = particle.z[ind]
 end
-
+function Base.sub2ind{N, T<:Integer}(res::NTuple{N, Int}, A::AbstractArray{T, N}...)
+    Int[sub2ind(res, i...) for i in zip(A...)]
+end
 function StaggeredVelocity(pxf,pyf,pzf,torus,vx,vy,vz)
-    @inbounds begin
     px = mod(pxf, torus.sizex)
     py = mod(pyf, torus.sizey)
     pz = mod(pzf, torus.sizez)
@@ -54,15 +55,15 @@ function StaggeredVelocity(pxf,pyf,pzf,torus,vx,vy,vz)
 
     res = (torus.resx,torus.resy,torus.resz)
     n = length(ix)
-    @inbounds begin
-        ind0 = [sub2ind(res, ix[i],iy[i],iz[i])::Int for i=1:n]
-        indxp = [sub2ind(res, ixp[i],iy[i],iz[i])::Int for i=1:n]
-        indyp = [sub2ind(res, ix[i],iyp[i],iz[i])::Int for i=1:n]
-        indzp = [sub2ind(res, ix[i],iy[i],izp[i])::Int for i=1:n]
-        indxpyp = [sub2ind(res, ixp[i],iyp[i],iz[i])::Int for i=1:n]
-        indypzp = [sub2ind(res, ix[i],iyp[i],izp[i])::Int for i=1:n]
-        indxpzp = [sub2ind(res, ixp[i],iy[i],izp[i])::Int for i=1:n]
-    end
+
+    ind0 = sub2ind(res, ix,iy,iz)
+    indxp = sub2ind(res, ixp,iy,iz)
+    indyp = sub2ind(res, ix,iyp,iz)
+    indzp = sub2ind(res, ix,iy,izp)
+    indxpyp = sub2ind(res, ixp,iyp,iz)
+    indypzp = sub2ind(res, ix,iyp,izp)
+    indxpzp = sub2ind(res, ixp,iy,izp)
+
     wx = px - (ix-1)*torus.dx
     wy = py - (iy-1)*torus.dy
     wz = pz - (iz-1)*torus.dz
@@ -75,6 +76,5 @@ function StaggeredVelocity(pxf,pyf,pzf,torus,vx,vy,vz)
 
     uz = ((1-wy).*((1-wx).*vz[ind0 ]+wx.*vz[indxp  ]) +
             wy .*((1-wx).*vz[indyp]+wx.*vz[indxpyp]))
-    end
     ux,uy,uz
 end
