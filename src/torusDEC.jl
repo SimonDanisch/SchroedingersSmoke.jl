@@ -88,7 +88,7 @@ type TorusDEC
     dx::Float64; dy::Float64; dz::Float64          # edge length
     sizex::Int; sizey::Int; sizez::Int # size of grid
     resx::Int; resy::Int; resz::Int    # number of grid points in each dimension
-
+    fac::Array{Float64,3}
     function TorusDEC(vol_size::NTuple{3}, vol_res::NTuple{3})
         obj = new()
         obj.sizex,obj.sizey, obj.sizez = vol_size
@@ -105,6 +105,12 @@ type TorusDEC
         obj.px = (obj.iix-1)*obj.dx;
         obj.py = (obj.iiy-1)*obj.dy;
         obj.pz = (obj.iiz-1)*obj.dz;
+        sx = sin(pi*(obj.iix-1)/obj.resx)/obj.dx
+        sy = sin(pi*(obj.iiy-1)/obj.resy)/obj.dy
+        sz = sin(pi*(obj.iiz-1)/obj.resz)/obj.dz
+        denom = sx.^2 + sy.^2 + sz.^2
+        obj.fac = -0.25./denom
+        obj.fac[1,1,1] = 0.0
         return obj
     end
     function TorusDEC(varargin...)
@@ -207,13 +213,12 @@ end
 PoissonSolve by Spectral method
 """
 function PoissonSolve(obj, f)
-    f = fft(f)
-    sx = sin(pi*(obj.iix-1)/obj.resx)/obj.dx
-    sy = sin(pi*(obj.iiy-1)/obj.resy)/obj.dy
-    sz = sin(pi*(obj.iiz-1)/obj.resz)/obj.dz
-    denom = sx.^2 + sy.^2 + sz.^2
-    fac = -0.25./denom
-    fac[1,1,1] = 0.0
-    f = f .* fac
-    ifft(f)
+    PoissonSolve!(obj, fft(f))
+end
+function PoissonSolve!(obj, fc)
+    @inbounds for i=1:length(obj.fac)
+        fc[i] = fc[i] .* obj.fac[i]
+    end
+    ifft!(fc)
+    fc
 end

@@ -67,9 +67,11 @@ solves Schroedinger equation for dt time.
 """
 function SchroedingerFlow(obj, psi1, psi2)
     psi1 = fftshift(fft(psi1)); psi2 = fftshift(fft(psi2));
-    psi1 = psi1.*obj.SchroedingerMask;
-    psi2 = psi2.*obj.SchroedingerMask;
-    psi1 = ifft(fftshift(psi1)); psi2 = ifft(fftshift(psi2));
+    @inbounds for i=1:length(psi1)
+        psi1[i] = psi1[i]*obj.SchroedingerMask[i];
+        psi2[i] = psi2[i]*obj.SchroedingerMask[i];
+    end
+    psi1 = ifft!(fftshift(psi1)); psi2 = ifft!(fftshift(psi2));
     psi1, psi2
 end
 
@@ -88,6 +90,27 @@ extracts velocity 1-form from (psi1,psi2).
 If hbar argument is empty, hbar=1 is assumed.
 """
 function VelocityOneForm(obj, psi1, psi2, hbar=1.0)
+    ixp = mod(obj.t.ix, obj.t.resx) + 1;
+    iyp = mod(obj.t.iy, obj.t.resy) + 1;
+    izp = mod(obj.t.iz, obj.t.resz) + 1;
+    vx = angle(
+        conj(psi1).*sub(psi1, ixp,:,:) +
+        conj(psi2).*sub(psi2, ixp,:,:)
+    );
+    vy = angle(
+        conj(psi1).*sub(psi1,:,iyp,:) +
+        conj(psi2).*sub(psi2,:,iyp,:)
+    )
+    vz = angle(
+        conj(psi1).*sub(psi1,:,:,izp) +
+        conj(psi2).*sub(psi2,:,:,izp)
+    )
+    vx = vx*hbar;
+    vy = vy*hbar;
+    vz = vz*hbar;
+    vx,vy,vz
+end
+function _velocity_oneform(obj, psi1, psi2, hbar=1.0)
     ixp = mod(obj.t.ix, obj.t.resx) + 1;
     iyp = mod(obj.t.iy, obj.t.resy) + 1;
     izp = mod(obj.t.iz, obj.t.resz) + 1;
@@ -134,33 +157,54 @@ end
 multiplies exp(i*q) to (psi1,psi2)
 """
 function GaugeTransform(psi1, psi2, q)
+    @inbounds for i=1:length(psi1)
+        psi1[i], psi2[i] = _gauge_transform(psi1[i], psi2[i], q[i])
+    end
+    psi1, psi2
+end
+function _gauge_transform(psi1, psi2, q)
     eiq = exp(1.0im*q);
-    psi1 = psi1.*eiq
-    psi2 = psi2.*eiq
+    psi1 = psi1*eiq
+    psi2 = psi2*eiq
     psi1,psi2
 end
-
 
 """
 extracts Clebsch variable s=(sx,sy,sz) from (psi1,psi2)
 """
 function Hopf(psi1,psi2)
+    sx = similar(Float64, psi1)
+    sy = similar(Float64, psi1)
+    sz = similar(Float64, psi1)
+    Hopf(psi1,psi2,sx,sy,sz)
+end
+function Hopf(psi1,psi2,sx,sy,sz)
+    @inbounds for i=1:length(sx)
+        sx[i], sy[j], sz[j] = _hopf(psi1[i], psi2[i])
+    end
+    sx,sy,sz
+end
+function _hopf(psi1,psi2)
     a = real(psi1)
     b = imag(psi1)
     c = real(psi2)
     d = imag(psi2)
-    sx = 2*(a.*c .+ b.*d);
-    sy = 2*(a.*d .- b.*c);
-    sz = a.^2 .+ b.^2 .- c.^2 .- d.^2;
+    sx = 2*(a*c + b*d)
+    sy = 2*(a*d - b*c)
+    sz = a^2 + b^2 - c^2 - d^2
     sx,sy,sz
 end
 
+Base.@pure function _normalize(psi1, psi2)
+    norm = sqrt(abs(psi1)^2 + abs(psi2)^2)
+    psi1/norm, psi2/norm
+end
 """
 normalizes (psi1,psi2)
 """
 function Normalize(psi1,psi2)
-    psi_norm = map((a,b)->sqrt(abs(a)^2 + abs(b)^2), psi1, psi2);
-    psi1 = psi1./psi_norm;
-    psi2 = psi2./psi_norm;
+    @inbounds for (i,j) in zip(eachindex(psi1), eachindex(psi2))
+        psi1[i], psi2[j] = _normalize(psi1[i], psi2[j])
+    end
     psi1, psi2
 end
