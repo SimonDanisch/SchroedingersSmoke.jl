@@ -4,43 +4,38 @@
  Velocities are trilinearly interpolated.
 """
 type Particles
-    x::Vector{Float32}
-    y::Vector{Float32}
-    z::Vector{Float32} # array of positions
+    #keeplist::Vector{UInt32}
+    xyz::Vector{Point3f0}
 end
 
 """
  advect particle positions using RK4 in a grid torus with
  staggered velocity vx,vy,vz, for dt period of time
 """
-function StaggeredAdvect(particle, torus, vx, vy, vz, dt)
-    k1x,k1y,k1z = StaggeredVelocity(
-        particle.x,particle.y,particle.z,
-        torus,vx,vy,vz
+function StaggeredAdvect(particle, torus, velocity, dt)
+    k1 = StaggeredVelocity(
+        particle.xyz,
+        torus,velocity
     )
-    k2x,k2y,k2z = StaggeredVelocity(
-        particle.x+k1x*dt/2,particle.y+k1y*dt/2,particle.z+k1z*dt/2,
-        torus,vx,vy,vz
+    k2 = StaggeredVelocity(
+        particle.xyz+k1*dt/2,
+        torus,velocity
     )
-    k3x,k3y,k3z = StaggeredVelocity(
-        particle.x+k2x*dt/2,particle.y+k2y*dt/2,particle.z+k2z*dt/2,
-        torus,vx,vy,vz
+    k3 = StaggeredVelocity(
+        particle.xyz+k2*dt/2,
+        torus,velocity
     )
-    k4x,k4y,k4z = StaggeredVelocity(
-        particle.x+k3x*dt,particle.y+k3y*dt,particle.z+k3z*dt,
-        torus,vx,vy,vz
+    k4 = StaggeredVelocity(
+        particle.xyz+k3*dt,
+        torus,velocity
     )
-    particle.x = particle.x + dt/6*(k1x+2*k2x+2*k3x+k4x)
-    particle.y = particle.y + dt/6*(k1y+2*k2y+2*k3y+k4y)
-    particle.z = particle.z + dt/6*(k1z+2*k2z+2*k3z+k4z)
+    particle.xyz = particle.xyz + dt/6*(k1+2*k2+2*k3+k4)
 end
 """
 for removing particles
 """
 function Keep(particle, ind)
-    particle.x = particle.x[ind]
-    particle.y = particle.y[ind]
-    particle.z = particle.z[ind]
+    particle.xyz = particle.xyz[ind]
 end
 
 """
@@ -54,21 +49,21 @@ end
  evaluates velocity at (px,py,pz) in the grid torus with staggered
  velocity vector field vx,vy,vz
 """
-function StaggeredVelocity(pxf,pyf,pzf,torus,vx,vy,vz)
-    px = mod(pxf, torus.sizex)
-    py = mod(pyf, torus.sizey)
-    pz = mod(pzf, torus.sizez)
-
-    ix = floor(Int, px/torus.dx) + 1
-    iy = floor(Int, py/torus.dy) + 1
-    iz = floor(Int, pz/torus.dz) + 1
-    ixp = mod(ix,torus.resx)+1
-    iyp = mod(iy,torus.resy)+1
-    izp = mod(iz,torus.resz)+1
-
+function StaggeredVelocity(pf,torus,velocity)
+    d = Point3f0(torus.dx, torus.dy, torus.dz)
+    ts = Point3f0(torus.sizex, torus.sizey, torus.sizez)
     res = (torus.resx,torus.resy,torus.resz)
+    resp = Point3f0(res)
 
-    ind0 = sub2ind(res, ix,iy,iz)
+    i = floor(Int, p/d) + 1
+    ip = mod(i, resp)+1
+
+    for (i, pf) in enumerate(velocity)
+        p = mod(pf, ts)
+        i = floor(p/d) + 1
+        ip = mod(i, resp)+1
+    end
+    ind0 = sub2ind(res, i)
     indxp = sub2ind(res, ixp,iy,iz)
     indyp = sub2ind(res, ix,iyp,iz)
     indzp = sub2ind(res, ix,iy,izp)
@@ -76,9 +71,7 @@ function StaggeredVelocity(pxf,pyf,pzf,torus,vx,vy,vz)
     indypzp = sub2ind(res, ix,iyp,izp)
     indxpzp = sub2ind(res, ixp,iy,izp)
 
-    wx = px - (ix-1)*torus.dx
-    wy = py - (iy-1)*torus.dy
-    wz = pz - (iz-1)*torus.dz
+    w = p - (i-1)*d
 
     ux = ((1-wz).*((1-wy).*vx[ind0 ]+wy.*vx[indyp  ]) +
             wz .*((1-wy).*vx[indzp]+wy.*vx[indypzp]))
