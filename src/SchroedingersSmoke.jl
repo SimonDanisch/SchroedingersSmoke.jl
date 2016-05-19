@@ -1,5 +1,5 @@
 module SchroedingersSmoke
-
+using GeometryTypes
 # matlab compat functions
 """
 logical and

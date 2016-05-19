@@ -39,47 +39,37 @@ function Keep(particle, ind)
 end
 
 """
-Base doesn't have a vectorized form of sub2ind, so we add it!
-"""
-function Base.sub2ind{N, T<:Integer}(res::NTuple{N, Int}, A::AbstractArray{T, N}...)
-    Int[sub2ind(res, i...) for i in zip(A...)]
-end
-
-"""
  evaluates velocity at (px,py,pz) in the grid torus with staggered
  velocity vector field vx,vy,vz
 """
 function StaggeredVelocity(pf,torus,velocity)
     d = Point3f0(torus.dx, torus.dy, torus.dz)
     ts = Point3f0(torus.sizex, torus.sizey, torus.sizez)
-    res = (torus.resx,torus.resy,torus.resz)
-    resp = Point3f0(res)
+    resp = Point3f0(torus.resx,torus.resy,torus.resz)
+    u = similar(pf)
+    @inbounds for (index, point) in enumerate(pf)
+        p = mod(point, ts)
+        i = Point{3, Int}(floor(p./d)) + 1
+        ip = Point{3, Int}(mod(i, resp))+1
 
-    i = floor(Int, p/d) + 1
-    ip = mod(i, resp)+1
-
-    for (i, pf) in enumerate(velocity)
-        p = mod(pf, ts)
-        i = floor(p/d) + 1
-        ip = mod(i, resp)+1
+        p0 = velocity[i[1], i[2], i[3]]
+        pxp = velocity[ip[1], i[2],  i[3]]
+        pyp = velocity[i[1],  ip[2], i[3]]
+        pzp = velocity[i[1],  i[2],  ip[3]]
+        w = p - (Point3f0(i)-1.).*d
+        ux = (
+            (1-w[3])*((1-w[2])*p0[1]+w[2]*pyp[1]) +
+            w[3] *((1-w[2])*pzp[1]+w[2]*velocity[i[1], ip[2], ip[3]][1])
+        )
+        uy = (
+            (1-w[3])*((1-w[1])*p0[2]+w[1]*pxp[2]) +
+            w[3] *((1-w[1])*pzp[2]+w[1]*velocity[ip[1],  i[2],  ip[3]][2])
+        )
+        uz = (
+            (1-w[2]).*((1-w[1]).*p0[3]+w[1].*pxp[3]) +
+            w[2] .*((1-w[1]).*pyp[3]+w[1].*velocity[ip[1], ip[2],  i[3]][3])
+        )
+        u[index] = Point3f0(ux, uy, uz)
     end
-    ind0 = sub2ind(res, i)
-    indxp = sub2ind(res, ixp,iy,iz)
-    indyp = sub2ind(res, ix,iyp,iz)
-    indzp = sub2ind(res, ix,iy,izp)
-    indxpyp = sub2ind(res, ixp,iyp,iz)
-    indypzp = sub2ind(res, ix,iyp,izp)
-    indxpzp = sub2ind(res, ixp,iy,izp)
-
-    w = p - (i-1)*d
-
-    ux = ((1-wz).*((1-wy).*vx[ind0 ]+wy.*vx[indyp  ]) +
-            wz .*((1-wy).*vx[indzp]+wy.*vx[indypzp]))
-
-    uy = ((1-wz).*((1-wx).*vy[ind0 ]+wx.*vy[indxp  ]) +
-            wz .*((1-wx).*vy[indzp]+wx.*vy[indxpzp]))
-
-    uz = ((1-wy).*((1-wx).*vz[ind0 ]+wx.*vz[indxp  ]) +
-            wy .*((1-wx).*vz[indyp]+wx.*vz[indxpyp]))
-    ux,uy,uz
+    u
 end

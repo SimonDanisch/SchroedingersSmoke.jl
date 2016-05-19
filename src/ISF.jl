@@ -79,8 +79,8 @@ end
 Pressure projection of 2-component wave function.
 """
 function PressureProject(obj, psi1, psi2)
-    vx,vy,vz = VelocityOneForm(obj, psi1,psi2)
-    div = Div(obj.t, vx,vy,vz)
+    velocity = VelocityOneForm(obj, psi1,psi2)
+    div = Div(obj.t, velocity)
     q = PoissonSolve(obj.t, div);
     GaugeTransform(psi1, psi2, -q)
 end
@@ -90,47 +90,21 @@ extracts velocity 1-form from (psi1,psi2).
 If hbar argument is empty, hbar=1 is assumed.
 """
 function VelocityOneForm(obj, psi1, psi2, hbar=1.0)
-    ixp = mod(obj.t.ix, obj.t.resx) + 1;
-    iyp = mod(obj.t.iy, obj.t.resy) + 1;
-    izp = mod(obj.t.iz, obj.t.resz) + 1;
-    vx = angle(
-        conj(psi1).*sub(psi1, ixp,:,:) +
-        conj(psi2).*sub(psi2, ixp,:,:)
-    );
-    vy = angle(
-        conj(psi1).*sub(psi1,:,iyp,:) +
-        conj(psi2).*sub(psi2,:,iyp,:)
-    )
-    vz = angle(
-        conj(psi1).*sub(psi1,:,:,izp) +
-        conj(psi2).*sub(psi2,:,:,izp)
-    )
-    vx = vx*hbar;
-    vy = vy*hbar;
-    vz = vz*hbar;
-    vx,vy,vz
+    @inbounds for z=obj.t.iz, y=obj.t.iy
+        @simd for x=obj.t.ix
+            ixp = mod(x, obj.t.resx) + 1
+            iyp = mod(y, obj.t.resy) + 1
+            izp = mod(z, obj.t.resz) + 1
+            psi1c = conj(psi1[x,y,z]); psi2c = conj(psi1[x,y,z]);
+            vx = angle(psi1c*psi1[ixp,y,z] + psi2c*psi2[ixp,y,z])
+            vy = angle(psi1c.*psi1[x,iyp,z] + psi2c.*psi2[x,iyp,z])
+            vz = angle(psi1c.*psi1[x,y,izp] + psi2c.*psi2[x,y,izp])
+            obj.t.velocity[x,y,z] = Point3f0(vx*hbar, vy*hbar, vz*hbar)
+        end
+    end
+    obj.t.velocity
 end
-function _velocity_oneform(obj, psi1, psi2, hbar=1.0)
-    ixp = mod(obj.t.ix, obj.t.resx) + 1;
-    iyp = mod(obj.t.iy, obj.t.resy) + 1;
-    izp = mod(obj.t.iz, obj.t.resz) + 1;
-    vx = angle(
-        conj(psi1).*sub(psi1, ixp,:,:) +
-        conj(psi2).*sub(psi2, ixp,:,:)
-    );
-    vy = angle(
-        conj(psi1).*sub(psi1,:,iyp,:) +
-        conj(psi2).*sub(psi2,:,iyp,:)
-    )
-    vz = angle(
-        conj(psi1).*sub(psi1,:,:,izp) +
-        conj(psi2).*sub(psi2,:,:,izp)
-    )
-    vx = vx*hbar;
-    vy = vy*hbar;
-    vz = vz*hbar;
-    vx,vy,vz
-end
+
 
 """
 adds a vortex ring to a 1-component wave function psi.
@@ -173,9 +147,10 @@ end
 extracts Clebsch variable s=(sx,sy,sz) from (psi1,psi2)
 """
 function Hopf(psi1,psi2)
-    sx = similar(Float64, psi1)
-    sy = similar(Float64, psi1)
-    sz = similar(Float64, psi1)
+    nd = size(psi1)
+    sx = Array(Float64, nd)
+    sy = Array(Float64, nd)
+    sz = Array(Float64, nd)
     Hopf(psi1,psi2,sx,sy,sz)
 end
 function Hopf(psi1,psi2,sx,sy,sz)

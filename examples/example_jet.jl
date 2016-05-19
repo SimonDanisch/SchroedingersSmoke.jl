@@ -1,4 +1,6 @@
-using SchroedingersSmoke
+Base.FFTW.set_num_threads(4)
+blas_set_num_threads(4)
+using SchroedingersSmoke, GeometryTypes
 
 # example_jet
 # An example of incompressible Schroedinger flow producing a jet.
@@ -60,9 +62,14 @@ end
 
 
 ## SET PARTICLES
-particle = Particles(Float32[], Float32[], Float32[])
+particle = Particles(Point3f0[])
 
-
+function GeometryTypes.isinside(point, lower, upper)
+    @inbounds for (p,l,u) in zip(point, lower, upper)
+        (p > l && p < u) || return false
+    end
+    true
+end
 ## MAIN ITERATION
 itermax = ceil(tmax/dt);
 function iterate(particle, isf, psi1, psi2, iter, omega, isJet)
@@ -73,57 +80,68 @@ function iterate(particle, isf, psi1, psi2, iter, omega, isJet)
     psi1, psi2 = PressureProject(isf, psi1,psi2)
 
     # constrain velocity
-    phase = kvec[1].*isf.t.px + kvec[2].*isf.t.py + kvec[3].*isf.t.pz - omega*t;
-    amp1 = abs(psi1);
-    amp2 = abs(psi2);
+    phase = kvec[1].*isf.t.px + kvec[2].*isf.t.py + kvec[3].*isf.t.pz - omega*t
+    amp1 = abs(psi1)
+    amp2 = abs(psi2)
     psi1[isJet] = amp1[isJet].*exp(1.im*phase[isJet])
     psi2[isJet] = amp2[isJet].*exp(1.im*phase[isJet])
     psi1, psi2 = PressureProject(isf, psi1, psi2)
 
     # particle birth
-    rt = rand(Float32, n_particles)*2*pi;
-    newx = nozzle_cen[1]*ones(Float32, size(rt))
-    newy = nozzle_cen[2] + 0.9*nozzle_rad*cos(rt)
-    newz = nozzle_cen[3] + 0.9*nozzle_rad*sin(rt)
-    append!(particle.x, newx)
-    append!(particle.y, newy)
-    append!(particle.z, newz)
+    newp = Point3f0[begin
+        rt = rand()*2*pi
+        Point3f0(
+            nozzle_cen[1],
+            nozzle_cen[2] + 0.9*nozzle_rad*cos(rt),
+            nozzle_cen[3] + 0.9*nozzle_rad*sin(rt)
+        )
+    end for i=1:n_particles]
+
+    append!(particle.xyz, newp)
     # advect and show particles
-    vx,vy,vz = VelocityOneForm(isf, psi1, psi2, isf.hbar);
-    vx,vy,vz = StaggeredSharp(isf.t,vx,vy,vz);
-    StaggeredAdvect(particle, isf.t,vx,vy,vz,isf.dt);
-    Keep(particle,
-        (particle.x .> 0f0) & (particle.x .< vol_size[1]) &
-        (particle.y .> 0f0) & (particle.y .< vol_size[2]) &
-        (particle.z .> 0f0) & (particle.z .< vol_size[3])
-    )
+    velocity = VelocityOneForm(isf, psi1, psi2, isf.hbar)
+    velocity = StaggeredSharp(isf.t, velocity)
+    StaggeredAdvect(particle, isf.t, velocity, isf.dt)
+
+    keep = [isinside(p, Point3f0(0f0), vol_size) for p in particle.xyz]
+    Keep(particle, keep)
 end
-#
-using GLVisualize, GeometryTypes, GLWindow, GLAbstraction, Colors, GLFW
-w=glscreen()
-view(
-    visualize(
-        (Sphere(Point2f0(0), 0.005f0), (Float32[0], Float32[0], Float32[0])),
-        color=RGBA{Float32}(0,0,0,0.3), billboard=true
-    ),
-    camera=:perspective
-)
-
-robj = renderlist(w)[1]
-
-gpu_x, gpu_y, gpu_z = robj[:position_x], robj[:position_y], robj[:position_z]
-frames = []
-for iter = 1:itermax
-    isopen(w) || break
+iter = 1
+for i=1:20
     iterate(particle, isf, psi1, psi2, iter, omega, isJet)
-    update!(gpu_x, particle.x)
-    update!(gpu_y, particle.y)
-    update!(gpu_z, particle.z)
-    render_frame(w)
-    push!(frames, screenbuffer(w))
-    GLFW.PollEvents()
 end
-empty!(w)
-yield()
-GLFW.DestroyWindow(GLWindow.nativewindow(w))
-create_video(frames, "test2", pwd(), 1)
+Profile.clear()
+Profile.init()
+@profile for iter = 1:100
+    @time iterate(particle, isf, psi1, psi2, iter, omega, isJet)
+end
+using ProfileView
+ProfileView.view()
+
+# using GLVisualize, GeometryTypes, GLWindow, GLAbstraction, Colors, GLFW
+# w=glscreen()
+# view(
+#     visualize(
+#         (Sphere(Point2f0(0), 0.005f0), Point3f0[0]),
+#         color=RGBA{Float32}(0,0,0,0.3), billboard=true
+#     ),
+#     camera=:perspective
+# )
+#
+# robj = renderlist(w)[1]
+#
+# gpu_xyz = robj[:position]
+# frames = []
+# for iter = 1:500
+#     isopen(w) || break
+#     @time iterate(particle, isf, psi1, psi2, iter, omega, isJet)
+#     update!(gpu_xyz, particle.xyz)
+#     render_frame(w)
+#     #push!(frames, screenbuffer(w))
+#     GLFW.PollEvents()
+# end
+#
+# empty!(w)
+# yield()
+# GLFW.DestroyWindow(GLWindow.nativewindow(w))
+# #create_video(frames, "test2", pwd(), 1)
