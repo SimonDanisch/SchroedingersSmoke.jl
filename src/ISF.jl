@@ -37,29 +37,29 @@
 #
 #
 # See also TorusDEC
-type ISF
+type ISF{T}
     t::TorusDEC
-    hbar::Float64             # reduced Planck constant
-    dt::Float64               # time step
-    SchroedingerMask::Array{Complex{Float64},3} # Fourier coefficient for solving Schroedinger eq
+    hbar::T             # reduced Planck constant
+    dt::T               # time step
+    SchroedingerMask::Array{Complex{T},3} # Fourier coefficient for solving Schroedinger eq
     function ISF(t, hbar, dt)
-        isf = new(t, hbar, dt)
+        isf = new{T}(t, hbar, dt)
         BuildSchroedinger(isf)
         isf
     end
 end
-
+ISF{T}(t, hbar::T, dt::T) = ISF{T}(t, hbar, dt)
 """
 builds coefficients in Fourier space.
 """
 function BuildSchroedinger(obj::ISF)
-    nx=obj.t.resx; ny=obj.t.resy; nz=obj.t.resz;
-    fac = -4*pi^2*obj.hbar;
-    kx = (obj.t.iix-1-nx/2)/(obj.t.sizex);
-    ky = (obj.t.iiy-1-ny/2)/(obj.t.sizey);
-    kz = (obj.t.iiz-1-nz/2)/(obj.t.sizez);
-    lambda = fac*(kx.^2+ky.^2+kz.^2);
-    obj.SchroedingerMask = exp(1.0im*lambda*obj.dt/2.);
+    nx=obj.t.resx; ny=obj.t.resy; nz=obj.t.resz
+    fac = -4*pi^2*obj.hbar
+    kx = (obj.t.iix-1-nx/2)/(obj.t.sizex)
+    ky = (obj.t.iiy-1-ny/2)/(obj.t.sizey)
+    kz = (obj.t.iiz-1-nz/2)/(obj.t.sizez)
+    lambda = fac*(kx.^2+ky.^2+kz.^2)
+    obj.SchroedingerMask = exp(1.0im*lambda*obj.dt/2.)
 end
 
 """
@@ -116,7 +116,6 @@ Input d specify the thickness around the disk to create a boost
 in phase. Usually d = 5*dx where dx is grid edge length.
 """
 function AddCircle(obj, psi, center, normal, r, d)
-
     rx = obj.t.px - center[1]
     ry = obj.t.py - center[2]
     rz = obj.t.pz - center[3]
@@ -150,9 +149,9 @@ function Hopf(psi1,psi2)
     b = imag(psi1)
     c = real(psi2)
     d = imag(psi2)
-    sx = 2*(a.*c + b.*d);
-    sy = 2*(a.*d - b.*c);
-    sz = a.^2 + b.^2 - c.^2 - d.^2;
+    sx = 2*(a.*c .+ b.*d);
+    sy = 2*(a.*d .- b.*c);
+    sz = a.^2 .+ b.^2 .- c.^2 .- d.^2;
     sx,sy,sz
 end
 
@@ -160,7 +159,7 @@ end
 normalizes (psi1,psi2)
 """
 function Normalize(psi1,psi2)
-    psi_norm = sqrt(abs(psi1).^2 + abs(psi2).^2);
+    psi_norm = map((a,b)->sqrt(abs(a)^2 + abs(b)^2), psi1, psi2);
     psi1 = psi1./psi_norm;
     psi2 = psi2./psi_norm;
     psi1, psi2
