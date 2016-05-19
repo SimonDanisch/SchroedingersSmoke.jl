@@ -81,22 +81,6 @@
 #       the 3-torus (negative semidefinite convension).
 #       u and f has zero mean.
 #
-
-
-function ndgrid{T}(vs::AbstractVector{T}...)
-    n = length(vs)
-    sz = map(length, vs)
-    out = ntuple(i->Array(T, sz), n)
-    s = 1
-    for i=1:n
-        a = out[i]::Array
-        v = vs[i]
-        snext = s*size(a,i)
-        ndgrid_fill(a, v, s, snext)
-        s = snext
-    end
-    out
-end
 type TorusDEC
     px::Array{Float64,3}; py::Array{Float64,3}; pz::Array{Float64,3}          # coordinates of grid points
     ix::UnitRange{Int}; iy::UnitRange{Int}; iz::UnitRange{Int}          # 1D index array
@@ -105,6 +89,24 @@ type TorusDEC
     sizex::Int; sizey::Int; sizez::Int # size of grid
     resx::Int; resy::Int; resz::Int    # number of grid points in each dimension
 
+    function TorusDEC(vol_size::NTuple{3}, vol_res::NTuple{3})
+        obj = new()
+        obj.sizex,obj.sizey, obj.sizez = vol_size
+        obj.resx = round(Int, vol_res[1])
+        obj.resy = round(Int, vol_res[2])
+        obj.resz = round(Int, vol_res[3])
+        obj.dx = obj.sizex/obj.resx;
+        obj.dy = obj.sizey/obj.resy;
+        obj.dz = obj.sizez/obj.resz;
+        obj.ix = 1:obj.resx;
+        obj.iy = 1:obj.resy;
+        obj.iz = 1:obj.resz;
+        obj.iix,obj.iiy,obj.iiz = ndgrid(obj.ix,obj.iy,obj.iz)
+        obj.px = (obj.iix-1)*obj.dx;
+        obj.py = (obj.iiy-1)*obj.dy;
+        obj.pz = (obj.iiz-1)*obj.dz;
+        return obj
+    end
     function TorusDEC(varargin...)
         n = length(varargin)
         if n == 0 # empty instance
@@ -114,25 +116,6 @@ type TorusDEC
             ratio = [varargin[1:3]...]./varargin[mi]
             res = round(ratio*varargin[4])
             return TorusDEC(varargin[1:3],res[1],res[2],res[3])
-        elseif n == 6
-            obj = new()
-            obj.sizex = varargin[1];
-            obj.sizey = varargin[2];
-            obj.sizez = varargin[3];
-            obj.resx = round(Int, varargin[4]);
-            obj.resy = round(Int, varargin[5]);
-            obj.resz = round(Int, varargin[6]);
-            obj.dx = obj.sizex/obj.resx;
-            obj.dy = obj.sizey/obj.resy;
-            obj.dz = obj.sizez/obj.resz;
-            obj.ix = 1:obj.resx;
-            obj.iy = 1:obj.resy;
-            obj.iz = 1:obj.resz;
-            obj.iix,obj.iiy,obj.iiz = ndgrid(obj.ix,obj.iy,obj.iz)
-            obj.px = (obj.iix-1)*obj.dx;
-            obj.py = (obj.iiy-1)*obj.dy;
-            obj.pz = (obj.iiz-1)*obj.dz;
-            return obj
         end
         error(
             "TorusDEC:badinput
@@ -142,7 +125,9 @@ type TorusDEC
 end
 
 
-
+"""
+ For a function f compute the 1-form df
+"""
 function DerivativeOfFunction{T}(obj::TorusDEC, f::Array{T, 3})
     ixp = mod(obj.ix, obj.resx) + 1
     iyp = mod(obj.iy, obj.resy) + 1
@@ -153,6 +138,9 @@ function DerivativeOfFunction{T}(obj::TorusDEC, f::Array{T, 3})
     vx, vy, vz
 end
 
+"""
+ For a 1-form v compute the 2-form dv
+"""
 function DerivativeOfOneForm(obj::TorusDEC,vx,vy,vz)
     ixp = mod(obj.ix, obj.resx) + 1
     iyp = mod(obj.iy, obj.resy) + 1
@@ -163,6 +151,9 @@ function DerivativeOfOneForm(obj::TorusDEC,vx,vy,vz)
     wx,wy,wz
 end
 
+"""
+ For a 2-form w compute the 3-form dw
+"""
 function DerivativeOfTwoForm(obj::TorusDEC,wx,wy,wz)
     ixp = mod(obj.ix, obj.resx) + 1
     iyp = mod(obj.iy, obj.resy) + 1
@@ -173,6 +164,9 @@ function DerivativeOfTwoForm(obj::TorusDEC,wx,wy,wz)
     f
 end
 
+"""
+For a 1-form v compute the function `*d*v`
+"""
 function Div(obj::TorusDEC,vx,vy,vz)
     ixm = mod(obj.ix-2, obj.resx) + 1
     iym = mod(obj.iy-2, obj.resy) + 1
@@ -183,29 +177,40 @@ function Div(obj::TorusDEC,vx,vy,vz)
     f
 end
 
+"""
+ For a 1-form v compute the corresponding vector field v^sharp by
+ averaging to vertices
+"""
+
 function Sharp(obj::TorusDEC,vx,vy,vz)
-    ixm = mod(obj.ix-2,obj.resx) + 1
-    iym = mod(obj.iy-2,obj.resy) + 1
-    izm = mod(obj.iz-2,obj.resz) + 1
+    ixm = mod(obj.ix-2, obj.resx) + 1
+    iym = mod(obj.iy-2, obj.resy) + 1
+    izm = mod(obj.iz-2, obj.resz) + 1
     ux = 0.5*( sub(vx, ixm,:,:) + vx )/obj.dx
     uy = 0.5*( sub(vy, :,iym,:) + vy )/obj.dy
     uz = 0.5*( sub(vz, :,:,izm) + vz )/obj.dz
     ux,uy,uz
 end
 
+"""
+ For a 1-form v compute the corresponding vector field `v^sharp` as
+ a staggered vector field living on edges
+"""
 function StaggeredSharp(obj::TorusDEC,vx,vy,vz)
-    ux = vx.*(1./obj.dx)
-    uy = vy.*(1./obj.dy)
-    uz = vz.*(1./obj.dz)
+    ux = vx/obj.dx
+    uy = vy/obj.dy
+    uz = vz/obj.dz
     ux,uy,uz
 end
 
-
+"""
+PoissonSolve by Spectral method
+"""
 function PoissonSolve(obj, f)
     f = fft(f)
-    sx = sin(3.1415926535897*(obj.iix-1)/obj.resx)/obj.dx
-    sy = sin(3.1415926535897*(obj.iiy-1)/obj.resy)/obj.dy
-    sz = sin(3.1415926535897*(obj.iiz-1)/obj.resz)/obj.dz
+    sx = sin(pi*(obj.iix-1)/obj.resx)/obj.dx
+    sy = sin(pi*(obj.iiy-1)/obj.resy)/obj.dy
+    sz = sin(pi*(obj.iiz-1)/obj.resz)/obj.dz
     denom = sx.^2 + sy.^2 + sz.^2
     fac = -0.25./denom
     fac[1,1,1] = 0.0

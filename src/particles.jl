@@ -9,6 +9,10 @@ type Particles
     z::Vector{Float32} # array of positions
 end
 
+"""
+ advect particle positions using RK4 in a grid torus with
+ staggered velocity vx,vy,vz, for dt period of time
+"""
 function StaggeredAdvect(particle, torus, vx, vy, vz, dt)
     k1x,k1y,k1z = StaggeredVelocity(
         particle.x,particle.y,particle.z,
@@ -26,9 +30,9 @@ function StaggeredAdvect(particle, torus, vx, vy, vz, dt)
         particle.x+k3x*dt,particle.y+k3y*dt,particle.z+k3z*dt,
         torus,vx,vy,vz
     )
-    particle.x += dt/6*(k1x+2*k2x+2*k3x+k4x)
-    particle.y += dt/6*(k1y+2*k2y+2*k3y+k4y)
-    particle.z += dt/6*(k1z+2*k2z+2*k3z+k4z)
+    particle.x = particle.x + dt/6*(k1x+2*k2x+2*k3x+k4x)
+    particle.y = particle.y + dt/6*(k1y+2*k2y+2*k3y+k4y)
+    particle.z = particle.z + dt/6*(k1z+2*k2z+2*k3z+k4z)
 end
 """
 for removing particles
@@ -38,9 +42,18 @@ function Keep(particle, ind)
     particle.y = particle.y[ind]
     particle.z = particle.z[ind]
 end
+
+"""
+Base doesn't have a vectorized form of sub2ind, so we add it!
+"""
 function Base.sub2ind{N, T<:Integer}(res::NTuple{N, Int}, A::AbstractArray{T, N}...)
     Int[sub2ind(res, i...) for i in zip(A...)]
 end
+
+"""
+ evaluates velocity at (px,py,pz) in the grid torus with staggered
+ velocity vector field vx,vy,vz
+"""
 function StaggeredVelocity(pxf,pyf,pzf,torus,vx,vy,vz)
     px = mod(pxf, torus.sizex)
     py = mod(pyf, torus.sizey)
@@ -54,7 +67,6 @@ function StaggeredVelocity(pxf,pyf,pzf,torus,vx,vy,vz)
     izp = mod(iz,torus.resz)+1
 
     res = (torus.resx,torus.resy,torus.resz)
-    n = length(ix)
 
     ind0 = sub2ind(res, ix,iy,iz)
     indxp = sub2ind(res, ixp,iy,iz)

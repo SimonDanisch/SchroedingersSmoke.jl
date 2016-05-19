@@ -49,7 +49,9 @@ type ISF
     end
 end
 
-
+"""
+builds coefficients in Fourier space.
+"""
 function BuildSchroedinger(obj::ISF)
     nx=obj.t.resx; ny=obj.t.resy; nz=obj.t.resz;
     fac = -4*pi^2*obj.hbar;
@@ -60,7 +62,9 @@ function BuildSchroedinger(obj::ISF)
     obj.SchroedingerMask = exp(1.0im*lambda*obj.dt/2.);
 end
 
-
+"""
+solves Schroedinger equation for dt time.
+"""
 function SchroedingerFlow(obj, psi1, psi2)
     psi1 = fftshift(fft(psi1)); psi2 = fftshift(fft(psi2));
     psi1 = psi1.*obj.SchroedingerMask;
@@ -69,7 +73,9 @@ function SchroedingerFlow(obj, psi1, psi2)
     psi1, psi2
 end
 
-
+"""
+Pressure projection of 2-component wave function.
+"""
 function PressureProject(obj, psi1, psi2)
     vx,vy,vz = VelocityOneForm(obj, psi1,psi2)
     div = Div(obj.t, vx,vy,vz)
@@ -77,22 +83,25 @@ function PressureProject(obj, psi1, psi2)
     GaugeTransform(psi1, psi2, -q)
 end
 
-VelocityOneForm(obj, psi1, psi2) = VelocityOneForm(obj, psi1, psi2, 1.0)
-function VelocityOneForm(obj, psi1, psi2, hbar)
+"""
+extracts velocity 1-form from (psi1,psi2).
+If hbar argument is empty, hbar=1 is assumed.
+"""
+function VelocityOneForm(obj, psi1, psi2, hbar=1.0)
     ixp = mod(obj.t.ix, obj.t.resx) + 1;
     iyp = mod(obj.t.iy, obj.t.resy) + 1;
     izp = mod(obj.t.iz, obj.t.resz) + 1;
     vx = angle(
-        conj(psi1).*psi1[ ixp,:,:] +
-        conj(psi2).*psi2[ ixp,:,:]
+        conj(psi1).*sub(psi1, ixp,:,:) +
+        conj(psi2).*sub(psi2, ixp,:,:)
     );
     vy = angle(
-        conj(psi1).*psi1[:,iyp,:] +
-        conj(psi2).*psi2[:,iyp,:]
+        conj(psi1).*sub(psi1,:,iyp,:) +
+        conj(psi2).*sub(psi2,:,iyp,:)
     )
     vz = angle(
-        conj(psi1).*psi1[:,:,izp] +
-        conj(psi2).*psi2[:,:,izp]
+        conj(psi1).*sub(psi1,:,:,izp) +
+        conj(psi2).*sub(psi2,:,:,izp)
     )
     vx = vx*hbar;
     vy = vy*hbar;
@@ -115,36 +124,44 @@ function AddCircle(obj, psi, center, normal, r, d)
     alpha = zeros(size(rx));
     z = rx*normal(1) + ry*normal(2) + rz*normal(3);
     inCylinder = rx.^2+ry.^2+rz.^2 - z.^2 < r^2;
-    inLayerP = land(z .> 0, land(z .<=  d/2, inCylinder))
-    inLayerM = land(z .<= 0, land(z .>= -d/2, inCylinder))
+    inLayerP = z> 0 & z<= d/2 & inCylinder
+    inLayerM = z<=0 & z>=-d/2 & inCylinder
     alpha[inLayerP] = -pi*(2*z(inLayerP)/d - 1)
     alpha[inLayerM] = -pi*(2*z(inLayerM)/d + 1)
-    psi.*exp(1i*alpha);
+    psi.*exp(1.im*alpha);
 end
 
-
+"""
+multiplies exp(i*q) to (psi1,psi2)
+"""
 function GaugeTransform(psi1, psi2, q)
-    eiq = exp(1.im*q);
+    eiq = exp(1.0im*q);
     psi1 = psi1.*eiq
     psi2 = psi2.*eiq
     psi1,psi2
 end
 
 
+"""
+extracts Clebsch variable s=(sx,sy,sz) from (psi1,psi2)
+"""
 function Hopf(psi1,psi2)
-    a = real(psi1);
-    b = imag(psi1);
-    c = real(psi2);
-    d = imag(psi2);
+    a = real(psi1)
+    b = imag(psi1)
+    c = real(psi2)
+    d = imag(psi2)
     sx = 2*(a.*c + b.*d);
     sy = 2*(a.*d - b.*c);
     sz = a.^2 + b.^2 - c.^2 - d.^2;
     sx,sy,sz
 end
 
+"""
+normalizes (psi1,psi2)
+"""
 function Normalize(psi1,psi2)
     psi_norm = sqrt(abs(psi1).^2 + abs(psi2).^2);
     psi1 = psi1./psi_norm;
     psi2 = psi2./psi_norm;
-    psi1,psi2
+    psi1, psi2
 end

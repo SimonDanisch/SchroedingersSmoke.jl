@@ -29,7 +29,7 @@ const n_particles = 50;   # number of particles
 ## INITIALIZATION
 
 
-isf = ISF(TorusDEC(vol_size..., vol_res...), hbar, dt)
+isf = ISF(TorusDEC(vol_size, vol_res), hbar, dt)
 
 # Set nozzle
 const isJet = land(
@@ -38,20 +38,21 @@ const isJet = land(
 )
 
 # initialize psi
-psi1 = ones(size(isf.t.px))
-psi2 = psi1*0.01
-psi1, psi2 = Normalize(psi1, psi2)
+psi1f = ones(size(isf.t.px))
+psi2f = psi1f*0.01
+psi1f, psi2f = Normalize(psi1f, psi2f)
 
 # constrain velocity
 kvec = jet_velocity/isf.hbar;
 omega = sum(jet_velocity.^2)/(2*isf.hbar);
 phase = kvec[1].*isf.t.px + kvec[2].*isf.t.py + kvec[3].*isf.t.pz;
 
+# convert to complex
+psi1 = (1.+0.im)*psi1f
+psi2 = (1.+0.im)*psi2f
 for iter = 1:10
     amp1 = abs(psi1)
     amp2 = abs(psi2)
-    psi1 = 1.im * psi1
-    psi2 = 1.im * psi2
     psi1[isJet] = amp1[isJet].*exp(1.im*phase[isJet])
     psi2[isJet] = amp2[isJet].*exp(1.im*phase[isJet])
     psi1, psi2 = PressureProject(isf, psi1, psi2)
@@ -111,16 +112,18 @@ view(
 robj = renderlist(w)[1]
 
 gpu_x, gpu_y, gpu_z = robj[:position_x], robj[:position_y], robj[:position_z]
-
+frames = []
 for iter = 1:itermax
     isopen(w) || break
-    @time iterate(particle, isf, psi1, psi2, iter, omega, isJet)
+    iterate(particle, isf, psi1, psi2, iter, omega, isJet)
     update!(gpu_x, particle.x)
     update!(gpu_y, particle.y)
     update!(gpu_z, particle.z)
-    GLWindow.render_frame(w)
+    render_frame(w)
+    push!(frames, screenbuffer(w))
     GLFW.PollEvents()
 end
 empty!(w)
 yield()
 GLFW.DestroyWindow(GLWindow.nativewindow(w))
+create_video(frames, "test2", pwd(), 1)
