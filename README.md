@@ -1,20 +1,17 @@
 # SchrödingersSmoke
 
-[![Build Status](https://travis-ci.org/SimonDanisch/SchrödingersSmoke.jl.svg?branch=master)](https://travis-ci.org/SimonDanisch/SchrödingersSmoke.jl)
-
-
 https://www.youtube.com/watch?v=5C9BLAXCe1I
 
-Julia port of:
+### Julia port of:
 
-Paper (38MB):
+#### Paper (38MB):
 http://multires.caltech.edu/pubs/SchrodingersSmoke.pdf
 
-Code (1.5MB):
+#### Code (1.5MB):
 http://multires.caltech.edu/pubs/SchrodingersSmokeCode.zip
 
 
-Authors of the Paper:
+### Authors of the Paper:
 
 Albert Chern
 Caltech
