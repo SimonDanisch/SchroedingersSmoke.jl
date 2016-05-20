@@ -90,17 +90,15 @@ extracts velocity 1-form from (psi1,psi2).
 If hbar argument is empty, hbar=1 is assumed.
 """
 function VelocityOneForm(obj, psi1, psi2, hbar=1.0)
-    @inbounds for z=obj.t.iz, y=obj.t.iy
-        @simd for x=obj.t.ix
-            ixp = mod(x, obj.t.resx) + 1
-            iyp = mod(y, obj.t.resy) + 1
-            izp = mod(z, obj.t.resz) + 1
-            psi1c = conj(psi1[x,y,z]); psi2c = conj(psi1[x,y,z]);
-            vx = angle(psi1c*psi1[ixp,y,z] + psi2c*psi2[ixp,y,z])
-            vy = angle(psi1c.*psi1[x,iyp,z] + psi2c.*psi2[x,iyp,z])
-            vz = angle(psi1c.*psi1[x,y,izp] + psi2c.*psi2[x,y,izp])
-            obj.t.velocity[x,y,z] = Point3f0(vx*hbar, vy*hbar, vz*hbar)
-        end
+    @inbounds for z=obj.t.iz, y=obj.t.iy, for x=obj.t.ix
+        ixp = mod(x, obj.t.resx) + 1
+        iyp = mod(y, obj.t.resy) + 1
+        izp = mod(z, obj.t.resz) + 1
+        psi1c = conj(psi1[x,y,z]); psi2c = conj(psi1[x,y,z])
+        vx = angle(psi1c* psi1[ixp,y,z] + psi2c* psi2[ixp,y,z])
+        vy = angle(psi1c.*psi1[x,iyp,z] + psi2c.*psi2[x,iyp,z])
+        vz = angle(psi1c.*psi1[x,y,izp] + psi2c.*psi2[x,y,izp])
+        obj.t.velocity[x,y,z] = Point3f0(vx*hbar, vy*hbar, vz*hbar)
     end
     obj.t.velocity
 end
@@ -131,17 +129,14 @@ end
 multiplies exp(i*q) to (psi1,psi2)
 """
 function GaugeTransform(psi1, psi2, q)
-    @inbounds for i=1:length(psi1)
-        psi1[i], psi2[i] = _gauge_transform(psi1[i], psi2[i], q[i])
+    @inbounds for i in eachindex(psi1)
+        eiq = exp(1.0im*q[i])
+        psi1[i] *= eiq
+        psi2[i] *= eiq
     end
     psi1, psi2
 end
-function _gauge_transform(psi1, psi2, q)
-    eiq = exp(1.0im*q);
-    psi1 = psi1*eiq
-    psi2 = psi2*eiq
-    psi1,psi2
-end
+
 
 """
 extracts Clebsch variable s=(sx,sy,sz) from (psi1,psi2)
@@ -159,7 +154,7 @@ function Hopf(psi1,psi2,sx,sy,sz)
     end
     sx,sy,sz
 end
-function _hopf(psi1,psi2)
+@inline function _hopf(psi1,psi2)
     a = real(psi1)
     b = imag(psi1)
     c = real(psi2)
@@ -170,7 +165,7 @@ function _hopf(psi1,psi2)
     sx,sy,sz
 end
 
-Base.@pure function _normalize(psi1, psi2)
+@inline function _normalize(psi1, psi2)
     norm = sqrt(abs(psi1)^2 + abs(psi2)^2)
     psi1/norm, psi2/norm
 end
