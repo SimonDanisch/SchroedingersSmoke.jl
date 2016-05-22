@@ -1,26 +1,17 @@
 
 
-float3 getindex(const float3 * p, int x, int y, int z, int3 size){
-    return getindex(p, int3(x, y, z), size)
+int3 get_global_id3(){
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int z = get_global_id(2);
+    return int3(x,y,z)+1; // to make porting easier, we use based 1 indexing
 }
-float3 getindex(const float3 * p, int3 xyz, int3 size){
-    return p[xyz.x + xyz.y * size.x + xyz.z * size.x * size.y];
-}
-void setindex(float3 * p, float3 value, int3 xyz, int3 size){
-    p[xyz.x + xyz.y * size.x + xyz.z * size.x * size.y] = value;
-}
-
-
-
 void DerivativeOfTwoForm(
         Torus obj,
         __global const float3* w,
         __global float* f,
     ){
-    int x = get_global_id(0);
-    int y = get_global_id(1);
-    int z = get_global_id(2);
-    int3 xyz = int3(x,y,z);
+
     ip = mod(xyz, obj.res) + 1
     float _x = getindex(w, ip.x, y, z, obj.res)[1];
     float _y = getindex(w, x, ip.y, z, obj.res)[2];
@@ -32,23 +23,34 @@ void DerivativeOfTwoForm(
     setindex(f, ff, xyz, obj.res);
 }
 
-void Div(
-        Torus obj,
-        __global const float3* velocity,
-        __global float* f,
+__kernel void Div(
+        const int3 res,
+        const float3 d,
+        __global const float* velocity,
+        __global float* f
     ){
-    int x = get_global_id(0);
-    int y = get_global_id(1);
-    int z = get_global_id(2);
-    int3 im = mod(x-2, obj.res) + 1;
-    float _x = getindex(velocity, im[1], y, z, obj.res)[1];
-    float _y = getindex(velocity, x, im[2], z, obj.res)[2];
-    float _z = getindex(velocity, x, y, im[3], obj.res)[3];
-    float3 v = getindex(velocity, x, y, z, obj.res);
-    float ff = (v[1] - _x) / obj.dx^2;
-    ff += (v[2] - _y) / obj.dy^2;
-    ff += (v[3] - _z) / obj.dz^2;
-    setindex(f, ff, ,x,y,z, obj.res);
+
+    int3 xyz = get_global_id3();
+    int3 im  = mod(xyz-2, res) + 1;
+    float _x = getindex3(velocity, (int3)(im.x, y, z), res).x;
+    float _y = getindex3(velocity, (int3)(x, im.y, z), res).y;
+    float _z = getindex3(velocity, (int3)(x, y, im.z), res).z;
+    float3 v = getindex3(velocity, xyz, res);
+
+    float ff = (v.x - _x) / d.x;
+    ff += (v.y - _y) / d.y;
+    ff += (v.z - _z) / d.z;
+
+    setindex(f, ff, xyz, res);
+}
+
+__kernel void StaggeredSharp(
+        TorusDEC obj,
+        const float3 d_inverse,
+        __global const float* velocity
+    ){
+    int3 xyz = get_global_id3();
+    setindex3(velocity, getindex3(velocity, xyz, obj.res) .* d, xyz, obj.res);
 }
 //
 // """
