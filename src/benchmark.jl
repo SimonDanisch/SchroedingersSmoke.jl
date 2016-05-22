@@ -1,11 +1,8 @@
 import OpenCL
-const cl = OpenCL
-device, ctx, queue = cl.create_compute_context()
 using GeometryTypes
 
-function threaded_map(f, v)
+const cl = OpenCL
 
-end
 function div_inner(d_square, res, xyz, velocity, f)
     im  = mod(xyz-2, res) + 1;
     x,y,z = xyz
@@ -25,7 +22,7 @@ function threaded_div(ds, v, f)
     segment = div(length(v), n)
     res = size(v)
     Threads.@threads for chunk in 1:segment:length(v)
-        @simd for i=chunk:(chunk+segment-1)
+        for i=chunk:(chunk+segment-1)
             @inbounds div_inner(ds, Vec{3,Int}(res...), Vec{3,Int}(ind2sub(res, i)), v, f)
         end
     end
@@ -33,7 +30,7 @@ function threaded_div(ds, v, f)
 end
 function devec_div(ds, res, v, f)
     for z=1:size(v,3), y=1:size(v,2), x=1:size(v,1)
-        div_inner(ds, Vec{3,Int}(res...), Vec{3,Int}(x,y,z), v, f)
+        @inbounds div_inner(ds, Vec{3,Int}(res...), Vec{3,Int}(x,y,z), v, f)
     end
     f
 end
@@ -75,9 +72,9 @@ __kernel void Div(
     int3 xyz = (int3)(x,y,z);
     int3 im  = mod(xyz-2, res) + 1;
 
-    float _x = velocity[sub2ind3D(res, (int3)(im.x, y, z))  ];
-    float _y = velocity[sub2ind3D(res, (int3)(x, im.y, z))+1];
-    float _z = velocity[sub2ind3D(res, (int3)(x, y, im.z))+2];
+    float _x = getindex3(velocity, (int3)(im.x, y, z), res).x;
+    float _y = getindex3(velocity, (int3)(x, im.y, z), res).y;
+    float _z = getindex3(velocity, (int3)(x, y, im.z), res).z;
 
     float3 v = getindex3(velocity, xyz, res);
 
@@ -88,9 +85,31 @@ __kernel void Div(
     setindex(f, ff, xyz, res);
 }
 """
-p = cl.Program(ctx, source=cl_kernel) |> cl.build!
-div_kernel = cl.Kernel(p, "Div")
+device_cpu = first(cl.devices(:cpu))
+ctx_cpu     = cl.Context(device_cpu)
+queue_cpu   = cl.CmdQueue(ctx_cpu)
+p_cpu = cl.Program(ctx_cpu, source=cl_kernel) |> cl.build!
 
+kernel_cpu = cl.Kernel(p_cpu, "Div")
+device_gpu = first(cl.devices(:gpu))
+ctx_gpu     = cl.Context(device_gpu)
+queue_gpu   = cl.CmdQueue(ctx_gpu)
+p_gpu = cl.Program(ctx_gpu, source=cl_kernel) |> cl.build!
+kernel_gpu = cl.Kernel(p_gpu, "Div")
+
+function callthecl(ctx, queue, kernel, f, vf32, d_square, res32)
+    v_buffer = cl.Buffer(Float32, ctx, (:r, :copy), hostbuf=vf32)
+    f_buffer = cl.Buffer(Float32, ctx, :w, length(f))
+
+    cl.set_args!(kernel, res32, d_square, v_buffer, f_buffer)
+    b = @elapsed begin
+        cl.enqueue_kernel(queue, kernel, (res32...), nothing)
+        cl.finish(queue)
+    end
+    r = cl.read(queue, f_buffer)
+    cl.finish(queue)
+    r, b
+end
 function test_cl(vol_size, vol_res)
     res = vol_res
     d = Point3f0(vol_size)./Point3f0(res);
@@ -102,47 +121,42 @@ function test_cl(vol_size, vol_res)
     res32 = Int32[res...]
     d_square = Float32[ds...]
 
+    r_gpu, t_gpu = callthecl(ctx_gpu, queue_gpu, kernel_gpu, f, vf32, d_square, res32)
+    r_cpu, t_cpu = callthecl(ctx_cpu, queue_cpu, kernel_cpu, f, vf32, d_square, res32)
 
-    a = @elapsed devec_div(d_square, res, v, f)
+    a = @elapsed threaded_div(d_square, v, f)
+    b = @elapsed devec_div(d_square, res, v, f)
 
-    v_buffer = cl.Buffer(Float32, ctx, (:r, :copy), hostbuf=vf32)
-    f_buffer = cl.Buffer(Float32, ctx, :w, length(f))
+    println("jl ", a)
+    println("jl th ", b)
+    println("cl cpu ", t_cpu)
+    println("cl gpu ", t_gpu)
 
-    cl.set_args!(div_kernel, res32, d_square, v_buffer, f_buffer)
-    b = @elapsed begin
-        cl.enqueue_kernel(queue, div_kernel, res, nothing)
-        cl.finish(queue)
-    end
-    r = cl.read(queue, f_buffer)
-    cl.finish(queue)
-    if !isapprox(vec(f), r)
-        println("shiit ", mean(vec(f) - r), " ", vol_res)
-    end
-    a,b
+
 end
-println(test_cl((4,4,4), (512,512,256)))
+println(test_cl((10,15,4), (256,256,256)))
 #5.78693, 0.15183
 
-t1 = Float64[]
-t2 = Float64[]
-for i=5:50:300, j=5:50:300, k=5:50:300
-    a,b = test_cl((4,4,4), (i,j,k))
-    push!(t1, a)
-    push!(t2, b)
-end
-
-using Vega
-range = vec([i*j*k for i=5:50:300, j=5:50:300, k=5:50:300])
-x = [range; range]
-y = [t1; t2]
-group = [["cpu" for i=t1]; ["gpu" for i in t2]]
-show(scatterplot(x = x, y = y, group = group))
-
-function s2i(D, index)
-    i0 = index-1;
-    return i0[1]+i0[2]*D[1] + i0[3] * D[1] * D[2] + i0[4] * D[1] *D[2] *D[3];
-end
-function s2i(D::NTuple{3, Int}, index)
-    i0 = index-1;
-    return i0[1] + i0[2]*D[1] + i0[3] * D[1] * D[2];
-end
+# t1 = Float64[]
+# t2 = Float64[]
+# for i=5:50:300, j=5:50:300, k=5:50:300
+#     a,b = test_cl((4,4,4), (i,j,k))
+#     push!(t1, a)
+#     push!(t2, b)
+# end
+#
+# using Vega
+# range = vec([i*j*k for i=5:50:300, j=5:50:300, k=5:50:300])
+# x = [range; range]
+# y = [t1; t2]
+# group = [["cpu" for i=t1]; ["gpu" for i in t2]]
+# show(scatterplot(x = x, y = y, group = group))
+#
+# function s2i(D, index)
+#     i0 = index-1;
+#     return i0[1]+i0[2]*D[1] + i0[3] * D[1] * D[2] + i0[4] * D[1] *D[2] *D[3];
+# end
+# function s2i(D::NTuple{3, Int}, index)
+#     i0 = index-1;
+#     return i0[1] + i0[2]*D[1] + i0[3] * D[1] * D[2];
+# end
