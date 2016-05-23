@@ -48,13 +48,13 @@ omega = sum(jet_velocity.^2)/(2*isf.hbar);
 phase = kvec[1].*isf.t.px + kvec[2].*isf.t.py + kvec[3].*isf.t.pz;
 
 # convert to complex
-psi1 = (1.+0.im)*psi1f
-psi2 = (1.+0.im)*psi2f
+psi1 = (1.+0.0im)*psi1f
+psi2 = (1.+0.0im)*psi2f
 for iter = 1:10
     amp1 = abs(psi1)
     amp2 = abs(psi2)
-    psi1[isJet] = amp1[isJet].*exp(1.im*phase[isJet])
-    psi2[isJet] = amp2[isJet].*exp(1.im*phase[isJet])
+    psi1[isJet] = amp1[isJet].*exp(1.0im*phase[isJet])
+    psi2[isJet] = amp2[isJet].*exp(1.0im*phase[isJet])
     psi1, psi2 = PressureProject(isf, psi1, psi2)
 end
 
@@ -76,8 +76,8 @@ function iterate(particle, isf, psi1, psi2, iter, omega, isJet)
     phase = kvec[1].*isf.t.px + kvec[2].*isf.t.py + kvec[3].*isf.t.pz - omega*t;
     amp1 = abs(psi1);
     amp2 = abs(psi2);
-    psi1[isJet] = amp1[isJet].*exp(1.im*phase[isJet])
-    psi2[isJet] = amp2[isJet].*exp(1.im*phase[isJet])
+    psi1[isJet] = amp1[isJet].*exp(1.0im*phase[isJet])
+    psi2[isJet] = amp2[isJet].*exp(1.0im*phase[isJet])
     psi1, psi2 = PressureProject(isf, psi1, psi2)
 
     # particle birth
@@ -99,31 +99,31 @@ function iterate(particle, isf, psi1, psi2, iter, omega, isJet)
     )
 end
 #
-using GLVisualize, GeometryTypes, GLWindow, GLAbstraction, Colors, GLFW
-w=glscreen()
-view(
-    visualize(
-        (Sphere(Point2f0(0), 0.005f0), (Float32[0], Float32[0], Float32[0])),
-        color=RGBA{Float32}(0,0,0,0.3), billboard=true
-    ),
-    camera=:perspective
-)
-
-robj = renderlist(w)[1]
-
-gpu_x, gpu_y, gpu_z = robj[:position_x], robj[:position_y], robj[:position_z]
-frames = []
-for iter = 1:itermax
-    isopen(w) || break
-    iterate(particle, isf, psi1, psi2, iter, omega, isJet)
-    update!(gpu_x, particle.x)
-    update!(gpu_y, particle.y)
-    update!(gpu_z, particle.z)
-    render_frame(w)
-    push!(frames, screenbuffer(w))
-    GLFW.PollEvents()
+# using GLVisualize, GeometryTypes, GLWindow, GLAbstraction, Colors, GLFW
+# w=glscreen()
+# view(
+#     visualize(
+#         (Sphere(Point2f0(0), 0.005f0), (Float32[0], Float32[0], Float32[0])),
+#         color=RGBA{Float32}(0,0,0,0.3), billboard=true
+#     ),
+#     camera=:perspective
+# )
+#
+# robj = renderlist(w)[1]
+#
+# gpu_x, gpu_y, gpu_z = robj[:position_x], robj[:position_y], robj[:position_z]
+# frames = []
+for iter = 1:1000
+    # isopen(w) || break
+    @time iterate(particle, isf, psi1, psi2, iter, omega, isJet)
+    # update!(gpu_x, particle.x)
+    # update!(gpu_y, particle.y)
+    # update!(gpu_z, particle.z)
+    # render_frame(w)
+    # push!(frames, screenbuffer(w))
+    # GLFW.PollEvents()
 end
-empty!(w)
-yield()
-GLFW.DestroyWindow(GLWindow.nativewindow(w))
-create_video(frames, "test2", pwd(), 1)
+# empty!(w)
+# yield()
+# GLFW.DestroyWindow(GLWindow.nativewindow(w))
+# create_video(frames, "test2", pwd(), 1)
