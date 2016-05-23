@@ -59,7 +59,7 @@ function BuildSchroedinger(obj::ISF)
     ky = (obj.t.iiy-1-ny/2)/(obj.t.sizey)
     kz = (obj.t.iiz-1-nz/2)/(obj.t.sizez)
     lambda = fac*(kx.^2+ky.^2+kz.^2)
-    obj.SchroedingerMask = exp(1.0im*lambda*obj.dt/2.)
+    obj.SchroedingerMask = exp(1f0*im*lambda*obj.dt/2.)
 end
 
 """
@@ -90,17 +90,17 @@ extracts velocity 1-form from (psi1,psi2).
 If hbar argument is empty, hbar=1 is assumed.
 """
 function VelocityOneForm(obj, psi1, psi2, hbar=1.0)
-    @inbounds for z=obj.t.iz, y=obj.t.iy, for x=obj.t.ix
-        ixp = mod(x, obj.t.resx) + 1
-        iyp = mod(y, obj.t.resy) + 1
-        izp = mod(z, obj.t.resz) + 1
+    res = Vec{3, Int32}(obj.t.resx, obj.t.resy, obj.t.resz)
+    velocity = obj.t.velocity
+    @inbounds for z=obj.t.iz, y=obj.t.iy, x=obj.t.ix
+        ip = mod(Vec{3, Int32}(x,y,z), res) + 1
         psi1c = conj(psi1[x,y,z]); psi2c = conj(psi1[x,y,z])
-        vx = angle(psi1c* psi1[ixp,y,z] + psi2c* psi2[ixp,y,z])
-        vy = angle(psi1c.*psi1[x,iyp,z] + psi2c.*psi2[x,iyp,z])
-        vz = angle(psi1c.*psi1[x,y,izp] + psi2c.*psi2[x,y,izp])
-        obj.t.velocity[x,y,z] = Point3f0(vx*hbar, vy*hbar, vz*hbar)
+        vx = angle(psi1c * psi1[ip[1],y,z] + psi2c * psi2[ip[1],y,z])
+        vy = angle(psi1c * psi1[x,ip[2],z] + psi2c * psi2[x,ip[2],z])
+        vz = angle(psi1c * psi1[x,y,ip[3]] + psi2c * psi2[x,y,ip[3]])
+        velocity[x,y,z] = Point3f0(vx*hbar, vy*hbar, vz*hbar)
     end
-    obj.t.velocity
+    velocity
 end
 
 
@@ -122,7 +122,7 @@ function AddCircle(obj, psi, center, normal, r, d)
     inLayerM = z<=0 & z>=-d/2 & inCylinder
     alpha[inLayerP] = -pi*(2*z(inLayerP)/d - 1)
     alpha[inLayerM] = -pi*(2*z(inLayerM)/d + 1)
-    psi.*exp(1.im*alpha);
+    psi.*exp(1f0*im*alpha);
 end
 
 """
@@ -130,7 +130,7 @@ multiplies exp(i*q) to (psi1,psi2)
 """
 function GaugeTransform(psi1, psi2, q)
     @inbounds for i in eachindex(psi1)
-        eiq = exp(1.0im*q[i])
+        eiq = exp(1f0*im*q[i])
         psi1[i] *= eiq
         psi2[i] *= eiq
     end
@@ -143,9 +143,9 @@ extracts Clebsch variable s=(sx,sy,sz) from (psi1,psi2)
 """
 function Hopf(psi1,psi2)
     nd = size(psi1)
-    sx = Array(Float64, nd)
-    sy = Array(Float64, nd)
-    sz = Array(Float64, nd)
+    sx = Array(Float32, nd)
+    sy = Array(Float32, nd)
+    sz = Array(Float32, nd)
     Hopf(psi1,psi2,sx,sy,sz)
 end
 function Hopf(psi1,psi2,sx,sy,sz)

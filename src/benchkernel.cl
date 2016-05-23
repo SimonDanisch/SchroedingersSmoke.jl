@@ -9,6 +9,10 @@ int sub2ind3D(int3 D, int3 index){
 float3 getindex3(__global const float* p, int3 xyz, int3 size){
     return vload3(sub2ind3D(size, xyz), p);
 }
+float4 getindex4(__global const float* p, int3 xyz, int3 size){
+    return vload4(sub2ind3D(size, xyz), p);
+}
+
 void setindex3(__global float* p, float3 value, int3 xyz, int3 size){
     vstore3(value, sub2ind3D(size, xyz), p);
 }
@@ -35,11 +39,13 @@ __kernel void Div(
     int3 xyz = (int3)(x,y,z);
     int3 im  = mod(xyz-2, res) + 1;
 
-    float _x = getindex3(velocity, (int3)(im.x, y, z), res).x;
+    float4 xv = getindex4(velocity, (int3)(im.x, y, z), res);
+    float3 v = xv.yzw;
+
+    float _x = xv.x;
     float _y = getindex3(velocity, (int3)(x, im.y, z), res).y;
     float _z = getindex3(velocity, (int3)(x, y, im.z), res).z;
 
-    float3 v = getindex3(velocity, xyz, res);
 
     float3 ff = (v - (float3)(_x, _y, _z)) * d;
 

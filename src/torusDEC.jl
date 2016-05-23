@@ -82,13 +82,13 @@
 #       u and f has zero mean.
 #
 type TorusDEC
-    px::Array{Float64,3}; py::Array{Float64,3}; pz::Array{Float64,3}          # coordinates of grid points
+    px::Array{Float32,3}; py::Array{Float32,3}; pz::Array{Float32,3}          # coordinates of grid points
     ix::UnitRange{Int}; iy::UnitRange{Int}; iz::UnitRange{Int}          # 1D index array
     iix::Array{Int, 3}; iiy::Array{Int, 3}; iiz::Array{Int, 3}         # 3D index array
-    dx::Float64; dy::Float64; dz::Float64          # edge length
+    dx::Float32; dy::Float32; dz::Float32          # edge length
     sizex::Int; sizey::Int; sizez::Int # size of grid
     resx::Int; resy::Int; resz::Int    # number of grid points in each dimension
-    fac::Array{Float64,3}
+    fac::Array{Float32,3}
     velocity::Array{Point3f0,3}
 
     function TorusDEC(vol_size::NTuple{3}, vol_res::NTuple{3})
@@ -185,7 +185,7 @@ end
  For a 2-form w compute the 3-form dw
 """
 function DerivativeOfTwoForm(obj::TorusDEC, w)
-    f = Array(Float64, size(w))
+    f = Array(Float32, size(w))
     @inbounds for z=obj.iz, y=obj.iy, x=obj.ix
         ixp = mod(x, obj.resx) + 1
         iyp = mod(y, obj.resy) + 1
@@ -206,19 +206,18 @@ end
 For a 1-form v compute the function `*d*v`
 """
 function Div(obj::TorusDEC, velocity)
-    f = Array(Float64, size(velocity))
+    f = Array(Float32, size(velocity))
+    d_square = 1./(Point3f0(obj.dx, obj.dy, obj.dz).^2)
+    res = Vec{3, Int32}(obj.resx, obj.resy, obj.resz)
     @inbounds for z=obj.iz, y=obj.iy, x=obj.ix
-        ixm = mod(x-2, obj.resx) + 1
-        iym = mod(y-2, obj.resy) + 1
-        izm = mod(z-2, obj.resz) + 1
-        _x = velocity[ixm, y, z][1]
-        _y = velocity[x, iym, z][2]
-        _z = velocity[x, y, izm][3]
-        v = velocity[x,y,z]
-        ff =  (v[1] - _x) / obj.dx^2
-        ff += (v[2] - _y) / obj.dy^2
-        ff += (v[3] - _z) / obj.dz^2
-        f[x,y,z] = ff
+        xyz = Vec{3, Int32}(x,y,z)
+        im  = mod(xyz-2, res) + 1;
+        _x = velocity[im[1], y, z][1];
+        _y = velocity[x, im[2], z][2];
+        _z = velocity[x, y, im[3]][3];
+        v  = velocity[x,y,z]
+        ff =  (v - Point3f0((_x, _y, _z))) .* d_square;
+        f[x,y,z] = sum(ff)
     end
     f
 end

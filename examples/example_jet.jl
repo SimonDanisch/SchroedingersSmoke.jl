@@ -50,13 +50,13 @@ omega = sum(jet_velocity.^2)/(2*isf.hbar);
 phase = kvec[1].*isf.t.px + kvec[2].*isf.t.py + kvec[3].*isf.t.pz;
 
 # convert to complex
-psi1 = (1.+0.im)*psi1f
-psi2 = (1.+0.im)*psi2f
+psi1 = (1.+0f0*im)*psi1f
+psi2 = (1.+0f0*im)*psi2f
 for iter = 1:10
     amp1 = abs(psi1)
     amp2 = abs(psi2)
-    psi1[isJet] = amp1[isJet].*exp(1.im*phase[isJet])
-    psi2[isJet] = amp2[isJet].*exp(1.im*phase[isJet])
+    psi1[isJet] = amp1[isJet].*exp(1f0*im*phase[isJet])
+    psi2[isJet] = amp2[isJet].*exp(1f0*im*phase[isJet])
     psi1, psi2 = PressureProject(isf, psi1, psi2)
 end
 
@@ -83,8 +83,9 @@ function iterate(particle, isf, psi1, psi2, iter, omega, isJet)
     phase = kvec[1].*isf.t.px + kvec[2].*isf.t.py + kvec[3].*isf.t.pz - omega*t
     amp1 = abs(psi1)
     amp2 = abs(psi2)
-    psi1[isJet] = amp1[isJet].*exp(1.im*phase[isJet])
-    psi2[isJet] = amp2[isJet].*exp(1.im*phase[isJet])
+    psi1[isJet] = amp1[isJet].*exp(1f0*im*phase[isJet])
+    psi2[isJet] = amp2[isJet].*exp(1f0*im*phase[isJet])
+
     psi1, psi2 = PressureProject(isf, psi1, psi2)
 
     # particle birth
@@ -106,42 +107,7 @@ function iterate(particle, isf, psi1, psi2, iter, omega, isJet)
     keep = [isinside(p, Point3f0(0f0), vol_size) for p in particle.xyz]
     Keep(particle, keep)
 end
-iter = 1
-for i=1:20
-    iterate(particle, isf, psi1, psi2, iter, omega, isJet)
-end
-Profile.clear()
-Profile.init()
-@profile for iter = 1:100
+
+for iter = 1:100
     @time iterate(particle, isf, psi1, psi2, iter, omega, isJet)
 end
-using ProfileView
-ProfileView.view()
-
-# using GLVisualize, GeometryTypes, GLWindow, GLAbstraction, Colors, GLFW
-# w=glscreen()
-# view(
-#     visualize(
-#         (Sphere(Point2f0(0), 0.005f0), Point3f0[0]),
-#         color=RGBA{Float32}(0,0,0,0.3), billboard=true
-#     ),
-#     camera=:perspective
-# )
-#
-# robj = renderlist(w)[1]
-#
-# gpu_xyz = robj[:position]
-# frames = []
-# for iter = 1:500
-#     isopen(w) || break
-#     @time iterate(particle, isf, psi1, psi2, iter, omega, isJet)
-#     update!(gpu_xyz, particle.xyz)
-#     render_frame(w)
-#     #push!(frames, screenbuffer(w))
-#     GLFW.PollEvents()
-# end
-#
-# empty!(w)
-# yield()
-# GLFW.DestroyWindow(GLWindow.nativewindow(w))
-# #create_video(frames, "test2", pwd(), 1)

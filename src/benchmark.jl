@@ -12,11 +12,11 @@ queue_gpu   = cl.CmdQueue(ctx_gpu)
 @inline function div_inner(d_square, res, xyz, velocity, f)
     im  = mod(xyz-2, res) + 1;
     x,y,z = xyz
-    _x = velocity[im[1], y, z][1];
-    _y = velocity[x, im[2], z][2];
-    _z = velocity[x, y, im[3]][3];
+    _x = velocity[im[1], y, z][1]
     v  = velocity[x,y,z]
-    ff =  (v - Vec{3, Float32}((_x, _y, _z))) .* d_square;
+    _y = velocity[x, im[2], z][2]
+    _z = velocity[x, y, im[3]][3]
+    ff =  (v - Vec{3, Float32}((_x, _y, _z))) .* d_square
     f[x,y,z] = sum(ff)
     nothing
 end
@@ -27,8 +27,10 @@ function threaded_div(ds, res, v, f)
     segment = div(length(v), n)
     res = size(v)
     Threads.@threads for chunk in 1:segment:length(v)
-        for i=chunk:(chunk+segment-1)
-            @inbounds div_inner(ds, res, Vec{3,Int32}(ind2sub(res, i)), v, f)
+        xs,ys,zs = ind2sub(res, chunk)
+        xe,ye,ze = ind2sub(res, chunk+segment-1)
+        for z=zs:ze, y=ys:ye, x=xs:xe
+            @inbounds div_inner(ds, res, Vec{3,Int32}(x,y,z), v, f)
         end
     end
     f
@@ -39,13 +41,25 @@ function devec_div(ds, res, v, f)
     end
     f
 end
+function compilekernel(ctx, source, kernel)
+    program = cl.Program(ctx, source=source)
+    cl.build!(program, raise=false)
+    for (dev, status) in cl.info(program, :build_status)
+        if status == cl.CL_BUILD_ERROR
+            dict = cl.info(program, :build_log)
+            for (k,v) in dict
+                println(k)
+                println(v)
+            end
+        end
+    end
+    cl.Kernel(program, kernel)
+end
+
 cl_kernel = readstring("benchkernel.cl")
+kernel_cpu = compilekernel(ctx_cpu, cl_kernel, "Div")
+kernel_gpu = compilekernel(ctx_gpu, cl_kernel, "Div")
 
-p_cpu = cl.Program(ctx_cpu, source=cl_kernel) |> cl.build!
-kernel_cpu = cl.Kernel(p_cpu, "Div")
-
-p_gpu = cl.Program(ctx_gpu, source=cl_kernel) |> cl.build!
-kernel_gpu = cl.Kernel(p_gpu, "Div")
 
 function callthecl(ctx, queue, kernel, f, vf32, d_square, res32)
     v_buffer = cl.Buffer(Float32, ctx, (:r, :copy), hostbuf=vf32)
@@ -53,7 +67,7 @@ function callthecl(ctx, queue, kernel, f, vf32, d_square, res32)
 
     cl.set_args!(kernel, res32, d_square, v_buffer, f_buffer)
     b = @elapsed begin
-        cl.enqueue_kernel(queue, kernel, (res32...), nothing)
+        cl.enqueue_kernel(queue, kernel, res32, nothing)
         cl.finish(queue)
     end
     r = cl.read(queue, f_buffer)
