@@ -2,6 +2,12 @@ import OpenCL
 using GeometryTypes
 
 const cl = OpenCL
+device_cpu = first(cl.devices(:cpu))
+ctx_cpu     = cl.Context(device_cpu)
+queue_cpu   = cl.CmdQueue(ctx_cpu)
+device_gpu = first(cl.devices(:gpu))
+ctx_gpu     = cl.Context(device_gpu)
+queue_gpu   = cl.CmdQueue(ctx_gpu)
 
 function div_inner(d_square, res, xyz, velocity, f)
     im  = mod(xyz-2, res) + 1;
@@ -10,90 +16,34 @@ function div_inner(d_square, res, xyz, velocity, f)
     _y = getindex(velocity, x, im[2], z)[2];
     _z = getindex(velocity, x, y, im[3])[3];
     v = velocity[x,y,z]
-    ff =  (v[1] - _x)/ d_square[1];
-    ff += (v[2] - _y)/ d_square[2];
-    ff += (v[3] - _z)/ d_square[3];
-    f[x,y,z] = ff
+    ff =  (v - Vec{3, Float32}((_x, _y, _z))) .* d_square;
+    f[x,y,z] = sum(ff)
     nothing
 end
-function threaded_div(ds, v, f)
+
+function threaded_div(ds, res, v, f)
     n = Threads.nthreads()
     @assert length(v) % n == 0
     segment = div(length(v), n)
     res = size(v)
     Threads.@threads for chunk in 1:segment:length(v)
         for i=chunk:(chunk+segment-1)
-            @inbounds div_inner(ds, Vec{3,Int}(res...), Vec{3,Int}(ind2sub(res, i)), v, f)
+            @inbounds div_inner(ds, res, Vec{3,Int32}(ind2sub(res, i)), v, f)
         end
     end
     f
 end
 function devec_div(ds, res, v, f)
     for z=1:size(v,3), y=1:size(v,2), x=1:size(v,1)
-        @inbounds div_inner(ds, Vec{3,Int}(res...), Vec{3,Int}(x,y,z), v, f)
+        @inbounds div_inner(ds, res, Vec{3,Int32}((x,y,z)), v, f)
     end
     f
 end
-cl_kernel = """
-int sub2ind4(int4 D, int4 index){
-    int4 i0 = index-1;
-    return i0.x+i0.y*D.x + i0.z * D.x * D.y + i0.w * D.x *D.y *D.z;
-}
-int sub2ind3D(int3 D, int3 index){
-    int3 i0 = index-1;
-    return i0.x+i0.y*D.x + i0.z * D.x * D.y;
-}
-float3 getindex3(__global const float* p, int3 xyz, int3 size){
-    return vload3(sub2ind3D(size, xyz), p);
-}
-void setindex3(__global float* p, float3 value, int3 xyz, int3 size){
-    vstore3(value, sub2ind3D(size, xyz), p);
-}
-float getindex(__global const float* p, int3 xyz, int3 size){
-    return p[sub2ind3D(size, xyz)];
-}
-void setindex(__global float* p, float value, int3 xyz, int3 size){
-    p[sub2ind3D(size, xyz)] = value;
-}
+cl_kernel = readstring("benchkernel.cl")
 
-int3 mod(int3 a, int3 m){
-    return a - m*convert_int3(floor(convert_float3(a)/convert_float3(m)));
-}
-__kernel void Div(
-        const int3 res,
-        const float3 d,
-        __global const float* velocity,
-        __global float* f
-    ){
-
-    int x = get_global_id(0) + 1;
-    int y = get_global_id(1) + 1;
-    int z = get_global_id(2) + 1;
-    int3 xyz = (int3)(x,y,z);
-    int3 im  = mod(xyz-2, res) + 1;
-
-    float _x = getindex3(velocity, (int3)(im.x, y, z), res).x;
-    float _y = getindex3(velocity, (int3)(x, im.y, z), res).y;
-    float _z = getindex3(velocity, (int3)(x, y, im.z), res).z;
-
-    float3 v = getindex3(velocity, xyz, res);
-
-    float ff = (v.x - _x) / d.x;
-    ff += (v.y - _y) / d.y;
-    ff += (v.z - _z) / d.z;
-
-    setindex(f, ff, xyz, res);
-}
-"""
-device_cpu = first(cl.devices(:cpu))
-ctx_cpu     = cl.Context(device_cpu)
-queue_cpu   = cl.CmdQueue(ctx_cpu)
 p_cpu = cl.Program(ctx_cpu, source=cl_kernel) |> cl.build!
-
 kernel_cpu = cl.Kernel(p_cpu, "Div")
-device_gpu = first(cl.devices(:gpu))
-ctx_gpu     = cl.Context(device_gpu)
-queue_gpu   = cl.CmdQueue(ctx_gpu)
+
 p_gpu = cl.Program(ctx_gpu, source=cl_kernel) |> cl.build!
 kernel_gpu = cl.Kernel(p_gpu, "Div")
 
@@ -112,29 +62,46 @@ function callthecl(ctx, queue, kernel, f, vf32, d_square, res32)
 end
 function test_cl(vol_size, vol_res)
     res = vol_res
-    d = Point3f0(vol_size)./Point3f0(res);
-    ds = d.^2
-    v = rand(Point3f0, res...)
 
-    f = Array(Float32, res...)
-    vf32 = reinterpret(Float32, v, (length(v)*3,))
-    res32 = Int32[res...]
-    d_square = Float32[ds...]
+    vf32 = rand(Float32, 3, res...)
 
-    r_gpu, t_gpu = callthecl(ctx_gpu, queue_gpu, kernel_gpu, f, vf32, d_square, res32)
-    r_cpu, t_cpu = callthecl(ctx_cpu, queue_cpu, kernel_cpu, f, vf32, d_square, res32)
+    v = reinterpret(Vec{3, Float32}, vf32, res)
 
-    a = @elapsed threaded_div(d_square, v, f)
-    b = @elapsed devec_div(d_square, res, v, f)
+    f1 = Array(Float32, res...)
+    f2 = Array(Float32, res...)
+
+    d = Vec{3, Float32}(vol_size)./Vec{3, Float32}(res);
+    ds = 1./(d.^2)
+    res32 = Vec{3,Int32}((res...,))
+
+    res32a = Int32[res...]
+    dsa = Float32[ds...]
+
+    r_gpu, t_gpu = callthecl(ctx_gpu, queue_gpu, kernel_gpu, f1, vf32, dsa, res32a)
+    r_cpu, t_cpu = callthecl(ctx_cpu, queue_cpu, kernel_cpu, f1, vf32, dsa, res32a)
+
+    b = @elapsed devec_div(ds, res32, v, f2)
+
+    a = @elapsed threaded_div(ds, res32, v, f1)
 
     println("jl ", a)
     println("jl th ", b)
     println("cl cpu ", t_cpu)
     println("cl gpu ", t_gpu)
-
+    if !isapprox(vec(f2),r_cpu )
+        println("shiit, ", mean(vec(f2) - r_cpu ))
+    end
 
 end
 println(test_cl((10,15,4), (256,256,256)))
+
+# julia> println(test_cl((10,15,4), (256,256,256)))
+# jl 4.639070838
+# jl th 1.430945919
+# cl cpu 0.069358667
+# cl gpu 0.033570734
+
+
 #5.78693, 0.15183
 
 # t1 = Float64[]
