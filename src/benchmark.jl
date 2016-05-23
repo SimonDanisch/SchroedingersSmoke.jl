@@ -9,13 +9,13 @@ device_gpu = first(cl.devices(:gpu))
 ctx_gpu     = cl.Context(device_gpu)
 queue_gpu   = cl.CmdQueue(ctx_gpu)
 
-function div_inner(d_square, res, xyz, velocity, f)
+@inline function div_inner(d_square, res, xyz, velocity, f)
     im  = mod(xyz-2, res) + 1;
     x,y,z = xyz
-    _x = getindex(velocity, im[1], y, z)[1];
-    _y = getindex(velocity, x, im[2], z)[2];
-    _z = getindex(velocity, x, y, im[3])[3];
-    v = velocity[x,y,z]
+    _x = velocity[im[1], y, z][1];
+    _y = velocity[x, im[2], z][2];
+    _z = velocity[x, y, im[3]][3];
+    v  = velocity[x,y,z]
     ff =  (v - Vec{3, Float32}((_x, _y, _z))) .* d_square;
     f[x,y,z] = sum(ff)
     nothing
@@ -88,8 +88,8 @@ function test_cl(vol_size, vol_res)
     println("jl th ", b)
     println("cl cpu ", t_cpu)
     println("cl gpu ", t_gpu)
-    if !isapprox(vec(f2),r_cpu )
-        println("shiit, ", mean(vec(f2) - r_cpu ))
+    if !(isapprox(vec(f2), r_cpu ) || isapprox(vec(f2), r_gpu) || isapprox(f2, f1))
+        println("shiit, ", mean(vec(f2) - r_cpu ), " ", mean(vec(f2) - r_gpu), " ", mean(f2 .- f1 ))
     end
 
 end
