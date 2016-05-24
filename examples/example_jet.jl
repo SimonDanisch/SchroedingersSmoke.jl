@@ -106,8 +106,29 @@ function iterate(particle, isf, psi1, psi2, iter, omega, isJet)
 
     keep = [isinside(p, Point3f0(0f0), vol_size) for p in particle.xyz]
     Keep(particle, keep)
+    velocity
 end
 
-for iter = 1:100
-    @time iterate(particle, isf, psi1, psi2, iter, omega, isJet)
+using GLVisualize, GeometryTypes, GLWindow, GLAbstraction, Colors, GLFW
+w=glscreen()
+view(
+    visualize(
+        reinterpret(Vec3f0, isf.t.velocity),
+        ranges=map(x->0:x, vol_size),
+        scale = (Vec3f0(vol_size) ./ Vec3f0(vol_res)) * 0.6f0,
+        color_norm = Vec2f0(0, 6)
+    ),
+    camera=:perspective
+)
+
+robj = renderlist(w)[1]
+
+gpu_velocity = robj[:rotation]
+
+for iter = 1:1000
+    isopen(w) || break
+    velocity = iterate(particle, isf, psi1, psi2, iter, omega, isJet)
+    update!(gpu_velocity, vec(reinterpret(Vec3f0, velocity)))
+    render_frame(w)
+    GLFW.PollEvents()
 end
