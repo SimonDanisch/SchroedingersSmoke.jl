@@ -98,6 +98,37 @@ function iterate(particle, isf, psi1, psi2, iter, omega, isJet)
         (particle.z .> 0f0) & (particle.z .< vol_size[3])
     )
 end
+
+## MAIN ITERATION
+function iterate(particle, isf, psi1, psi2, iter, omega)
+    t = iter*dt
+    # incompressible Schroedinger flow
+    psi1, psi2 = SchroedingerFlow(isf, psi1,psi2)
+    #psi1, psi2 = Normalize(psi1,psi2)
+    #psi1, psi2 = PressureProject(isf, psi1,psi2)
+
+
+    # particle birth
+    rt = rand(Float32, n_particles)*2*pi;
+    newx = nozzle_cen[1]*ones(Float32, size(rt))
+    newy = nozzle_cen[2] + 0.9*nozzle_rad*cos(rt)
+    newz = nozzle_cen[3] + 0.9*nozzle_rad*sin(rt)
+    append!(particle.x, newx)
+    append!(particle.y, newy)
+    append!(particle.z, newz)
+    # advect and show particles
+    vx,vy,vz = VelocityOneForm(isf, psi1, psi2, isf.hbar);
+    vx,vy,vz = StaggeredSharp(isf.t,vx,vy,vz);
+    StaggeredAdvect(particle, isf.t,vx,vy,vz,isf.dt);
+    Keep(particle,
+        (particle.x .> 0f0) & (particle.x .< vol_size[1]) &
+        (particle.y .> 0f0) & (particle.y .< vol_size[2]) &
+        (particle.z .> 0f0) & (particle.z .< vol_size[3])
+    )
+    Vec3f0[Vec3f0(x...) for x in zip(vx,vy,vz)]
+end
+
+<<<<<<< Updated upstream
 #
 # using GLVisualize, GeometryTypes, GLWindow, GLAbstraction, Colors, GLFW
 # w=glscreen()
@@ -122,6 +153,40 @@ for iter = 1:1000
     # render_frame(w)
     # push!(frames, screenbuffer(w))
     # GLFW.PollEvents()
+=======
+
+using GLVisualize, GeometryTypes, GLWindow, GLAbstraction, Colors, GLFW
+w=glscreen()
+cubecamera(w)
+view(
+    visualize(
+        reinterpret(Vec3f0, isf.t.velocity),
+        ranges=map(x->0:x, vol_size),
+        color_norm = Vec2f0(0, 6),
+        color_map = RGBA{Float32}[RGBA{Float32}(0,1,0,0.6), RGBA{Float32}(1,0,0,1)]
+    ),
+    camera=:perspective
+)
+view(
+    visualize(
+        (Circle(Point2f0(0), 0.01f0), Point3f0[0]),
+        billboard=true
+    ),
+    camera=:perspective
+)
+
+gpu_velocity = renderlist(w)[1][:rotation]
+gpu_position = renderlist(w)[2][:position]
+
+
+for iter = 1:2000
+    isopen(w) || break
+    velocity = iterate(particle, isf, psi1, psi2, iter, omega, isJet)
+    update!(gpu_velocity, vec(reinterpret(Vec3f0, velocity)))
+    update!(gpu_position, particle.xyz)
+    render_frame(w)
+    GLFW.PollEvents()
+>>>>>>> Stashed changes
 end
 # empty!(w)
 # yield()

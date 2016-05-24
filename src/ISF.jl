@@ -55,9 +55,9 @@ builds coefficients in Fourier space.
 function BuildSchroedinger(obj::ISF)
     nx=obj.t.resx; ny=obj.t.resy; nz=obj.t.resz;
     fac = -4*pi^2*obj.hbar;
-    kx = (obj.t.iix-1-nx/2)/(obj.t.sizex);
-    ky = (obj.t.iiy-1-ny/2)/(obj.t.sizey);
-    kz = (obj.t.iiz-1-nz/2)/(obj.t.sizez);
+    kx = (obj.t.iix-1-nx/2) / (obj.t.sizex);
+    ky = (obj.t.iiy-1-ny/2) / (obj.t.sizey);
+    kz = (obj.t.iiz-1-nz/2) / (obj.t.sizez);
     lambda = fac*(kx.^2+ky.^2+kz.^2);
     obj.SchroedingerMask = exp(1.0im*lambda*obj.dt/2.);
 end
@@ -122,13 +122,13 @@ function AddCircle(obj, psi, center, normal, r, d)
     rz = obj.t.pz - center[3]
     normal = normal/norm(normal,2);
     alpha = zeros(size(rx));
-    z = rx*normal(1) + ry*normal(2) + rz*normal(3);
-    inCylinder = rx.^2+ry.^2+rz.^2 - z.^2 < r^2;
-    inLayerP = z> 0 & z<= d/2 & inCylinder
-    inLayerM = z<=0 & z>=-d/2 & inCylinder
-    alpha[inLayerP] = -pi*(2*z(inLayerP)/d - 1)
-    alpha[inLayerM] = -pi*(2*z(inLayerM)/d + 1)
-    psi.*exp(1.0im*alpha);
+    z = rx*normal[1] + ry*normal[2] + rz*normal[3];
+    inCylinder = rx.^2+ry.^2+rz.^2 - z.^2 .< r^2;
+    inLayerP = land(land(z .> 0, z .<= d/2), inCylinder)
+    inLayerM = land(land(z.<=0, z .>= -d/2), inCylinder)
+    alpha[inLayerP] = -pi*(2*z[inLayerP]/d - 1)
+    alpha[inLayerM] = -pi*(2*z[inLayerM]/d + 1)
+    psi.*exp(1.0*im*alpha);
 end
 
 """
@@ -159,7 +159,7 @@ end
 """
 normalizes (psi1,psi2)
 """
-function Normalize(psi1,psi2)
+function Normalize(psi1, psi2)
     psi_norm = sqrt(abs(psi1).^2 + abs(psi2).^2);
     psi1 = psi1./psi_norm;
     psi2 = psi2./psi_norm;
