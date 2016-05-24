@@ -7,26 +7,26 @@ hbar = 0.1f0;            # Planck constant
 dt = 1/48;             # time step
 tmax = 50
 # empty!(w)
+# view(
+#     visualize(
+#         zeros(Vec3f0, vol_res),
+#         ranges=map(x->0:x, vol_size),
+#         color_norm = Vec2f0(0, 6),
+#         color_map = RGBA{Float32}[RGBA{Float32}(0,1,0,0.6), RGBA{Float32}(1,0,0,1)]
+#     ),
+#     camera=:perspective
+# )
 view(
     visualize(
-        zeros(Vec3f0, vol_res),
-        ranges=map(x->0:x, vol_size),
-        color_norm = Vec2f0(0, 6),
-        color_map = RGBA{Float32}[RGBA{Float32}(0,1,0,0.6), RGBA{Float32}(1,0,0,1)]
-    ),
-    camera=:perspective
-)
-view(
-    visualize(
-        (Circle(Point2f0(0), 0.01f0), (Float32[0], Float32[0], Float32[0])),
+        (Circle(Point2f0(0), 0.005f0), (Float32[0], Float32[0], Float32[0])),
         billboard=true
     ),
     camera=:perspective
 )
-gpu_velocity = renderlist(w)[2][:rotation]
-gpu_position_x = renderlist(w)[3][:position_x]
-gpu_position_y = renderlist(w)[3][:position_y]
-gpu_position_z = renderlist(w)[3][:position_z]
+#gpu_velocity = renderlist(w)[2][:rotation]
+gpu_position_x = renderlist(w)[1][:position_x]
+gpu_position_y = renderlist(w)[1][:position_y]
+gpu_position_z = renderlist(w)[1][:position_z]
 
 
 Base.FFTW.set_num_threads(4)
@@ -119,7 +119,7 @@ for iter = 1:200
     update!(gpu_position_x, particle.x)
     update!(gpu_position_y, particle.y)
     update!(gpu_position_z, particle.z)
-    
+
     render_frame(w)
     GLFW.PollEvents()
 end
