@@ -8,8 +8,8 @@ using SchroedingersSmoke, GeometryTypes
 ## PARAMETERS
 const vol_size = (4,2,2);   # box size
 const vol_res = (64,32,32); # volume resolution
-const hbar = 0.1;            # Planck constant
-const dt = 1/48;             # time step
+const hbar = 0.1f0;            # Planck constant
+const dt = 1f0/48f0;             # time step
 const tmax = 50;             # max time
 
 # another interesting set of parameter:
@@ -17,13 +17,12 @@ const tmax = 50;             # max time
 # const vol_res = (128,64,64); # volume resolution
 # const hbar = 0.02;            # Planck constant
 # const dt = 1/48;             # time step
-# const tmax = 10;             # max time
 
 const jet_velocity = [1,0,0]; # jet velocity
 
-const nozzle_cen = [2-1.7, 1-0.034, 1+0.066]; # nozzle center
-const nozzle_len = 0.5;                   # nozzle length
-const nozzle_rad = 0.5;                   # nozzle radius
+const nozzle_cen = Float32[2-1.7, 1-0.034, 1+0.066]; # nozzle center
+const nozzle_len = 0.5f0;                   # nozzle length
+const nozzle_rad = 0.5f0;                   # nozzle radius
 
 const n_particles = 50;   # number of particles
 
@@ -41,7 +40,7 @@ const isJet = land(
 
 # initialize psi
 psi1f = ones(size(isf.t.px))
-psi2f = psi1f*0.01
+psi2f = psi1f*0.01f0
 psi1f, psi2f = Normalize(psi1f, psi2f)
 
 # constrain velocity
@@ -50,8 +49,8 @@ omega = sum(jet_velocity.^2)/(2*isf.hbar);
 phase = kvec[1].*isf.t.px + kvec[2].*isf.t.py + kvec[3].*isf.t.pz;
 
 # convert to complex
-psi1 = (1.+0f0*im)*psi1f
-psi2 = (1.+0f0*im)*psi2f
+psi1 = (1f0+0f0*im)*psi1f
+psi2 = (1f0+0f0*im)*psi2f
 for iter = 1:10
     amp1 = abs(psi1)
     amp2 = abs(psi2)
@@ -93,8 +92,8 @@ function iterate(particle, isf, psi1, psi2, iter, omega, isJet)
         rt = rand()*2*pi
         Point3f0(
             nozzle_cen[1],
-            nozzle_cen[2] + 0.9*nozzle_rad*cos(rt),
-            nozzle_cen[3] + 0.9*nozzle_rad*sin(rt)
+            nozzle_cen[2] + 0.9f0*nozzle_rad*cos(rt),
+            nozzle_cen[3] + 0.9f0*nozzle_rad*sin(rt)
         )
     end for i=1:n_particles]
 
@@ -115,20 +114,27 @@ view(
     visualize(
         reinterpret(Vec3f0, isf.t.velocity),
         ranges=map(x->0:x, vol_size),
-        scale = (Vec3f0(vol_size) ./ Vec3f0(vol_res)) * 0.6f0,
         color_norm = Vec2f0(0, 6)
     ),
     camera=:perspective
 )
+view(
+    visualize(
+        (Circle(Point2f0(0), 0.01f0), Point3f0[0]),
+        billboard=true
+    ),
+    camera=:perspective
+)
 
-robj = renderlist(w)[1]
+gpu_velocity = renderlist(w)[1][:rotation]
+gpu_position = renderlist(w)[2][:position]
 
-gpu_velocity = robj[:rotation]
 
 for iter = 1:1000
     isopen(w) || break
     velocity = iterate(particle, isf, psi1, psi2, iter, omega, isJet)
     update!(gpu_velocity, vec(reinterpret(Vec3f0, velocity)))
+    update!(gpu_position, particle.xyz)
     render_frame(w)
     GLFW.PollEvents()
 end

@@ -89,7 +89,7 @@ end
 extracts velocity 1-form from (psi1,psi2).
 If hbar argument is empty, hbar=1 is assumed.
 """
-function VelocityOneForm(obj, psi1, psi2, hbar=1.0)
+function VelocityOneForm(obj, psi1, psi2, hbar=1.0f0)
     res = Vec{3, Int32}(obj.t.resx, obj.t.resy, obj.t.resz)
     velocity = obj.t.velocity
     @inbounds for z=obj.t.iz, y=obj.t.iy, x=obj.t.ix
