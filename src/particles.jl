@@ -7,32 +7,46 @@ type Particles
     x::Vector{Float32}
     y::Vector{Float32}
     z::Vector{Float32} # array of positions
+    length::Int
+    active::Vector{Int}
 end
+Base.length(p::Particles) = p.length
 
+function Base.append!(p::Particles, x, y, z)
+    @assert length(x) + p.length < length(p.x)
+    range = (p.length+1):(p.length+length(x))
+    p.x[range] = x
+    p.y[range] = y
+    p.z[range] = z
+    p.length   = (p.length+length(x))
+    append!(p.active, range)
+    nothing
+end
 """
  advect particle positions using RK4 in a grid torus with
  staggered velocity vx,vy,vz, for dt period of time
 """
-function StaggeredAdvect(particle, torus, vx, vy, vz, dt)
+function StaggeredAdvect(p, torus, vx, vy, vz, dt)
+    px, py, pz = p.x[p.active], p.y[p.active], p.z[p.active]
     k1x,k1y,k1z = StaggeredVelocity(
-        particle.x,particle.y,particle.z,
+        px,py,pz,
         torus,vx,vy,vz
     )
     k2x,k2y,k2z = StaggeredVelocity(
-        particle.x+k1x*dt/2,particle.y+k1y*dt/2,particle.z+k1z*dt/2,
+        px+k1x*dt/2,py+k1y*dt/2,pz+k1z*dt/2,
         torus,vx,vy,vz
     )
     k3x,k3y,k3z = StaggeredVelocity(
-        particle.x+k2x*dt/2,particle.y+k2y*dt/2,particle.z+k2z*dt/2,
+        px+k2x*dt/2,py+k2y*dt/2,pz+k2z*dt/2,
         torus,vx,vy,vz
     )
     k4x,k4y,k4z = StaggeredVelocity(
-        particle.x+k3x*dt,particle.y+k3y*dt,particle.z+k3z*dt,
+        px+k3x*dt,py+k3y*dt,pz+k3z*dt,
         torus,vx,vy,vz
     )
-    particle.x = particle.x + dt/6*(k1x+2*k2x+2*k3x+k4x)
-    particle.y = particle.y + dt/6*(k1y+2*k2y+2*k3y+k4y)
-    particle.z = particle.z + dt/6*(k1z+2*k2z+2*k3z+k4z)
+    p.x[p.active] = px + dt/6*(k1x+2*k2x+2*k3x+k4x)
+    p.y[p.active] = py + dt/6*(k1y+2*k2y+2*k3y+k4y)
+    p.z[p.active] = pz + dt/6*(k1z+2*k2z+2*k3z+k4z)
 end
 """
 for removing particles
