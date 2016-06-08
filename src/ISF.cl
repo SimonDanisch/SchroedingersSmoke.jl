@@ -55,19 +55,14 @@ void GaugeTransform(
         __global const float* psi1,
         __global const float* psi2,
         __global float* q,
-    )
+    ){
     int3 i = get_global_id3();
     float eiq = cfloat_exp(cfloat_mul(cfloat(0,1), getindexcf(q, i, obj.res)));
     setindexfc(psi1, cfloat_mul(getindexcf(psi1, i, obj.res), eiq), i, obj.res);
     setindexfc(psi2, cfloat_mul(getindexcf(psi2, i, obj.res), eiq), i, obj.res);
-end
-
-
-
-
-float2 _normalize(float2 psi1, float2 psi2){
-    float2(psi1/norm, psi2/norm);
 }
+
+
 
 void Normalize(
         __global float* psi1,

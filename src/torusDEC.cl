@@ -6,22 +6,7 @@ int3 get_global_id3(){
     int z = get_global_id(2);
     return int3(x,y,z)+1; // to make porting easier, we use based 1 indexing
 }
-void DerivativeOfTwoForm(
-        Torus obj,
-        __global const float3* w,
-        __global float* f,
-    ){
 
-    ip = mod(xyz, obj.res) + 1
-    float _x = getindex(w, ip.x, y, z, obj.res)[1];
-    float _y = getindex(w, x, ip.y, z, obj.res)[2];
-    float _z = getindex(w, x, y, ip.z, obj.res)[3];
-    float3 wi = getindex(w, xyz, obj.res);
-    ff =  _x - wi[1];
-    ff += _y - wi[2];
-    ff += _z - wi[3];
-    setindex(f, ff, xyz, obj.res);
-}
 
 __kernel void Div(
         const int3 res,
@@ -52,6 +37,8 @@ __kernel void StaggeredSharp(
     int3 xyz = get_global_id3();
     setindex3(velocity, getindex3(velocity, xyz, obj.res) .* d, xyz, obj.res);
 }
+
+
 //
 // """
 //  For a 1-form v compute the corresponding vector field v^sharp by
@@ -145,3 +132,19 @@ __kernel void StaggeredSharp(
 //     end
 //     w
 // end
+// void DerivativeOfTwoForm(
+//         Torus obj,
+//         __global const float3* w,
+//         __global float* f,
+//     ){
+//
+//     ip = mod(xyz, obj.res) + 1
+//     float _x = getindex(w, ip.x, y, z, obj.res)[1];
+//     float _y = getindex(w, x, ip.y, z, obj.res)[2];
+//     float _z = getindex(w, x, y, ip.z, obj.res)[3];
+//     float3 wi = setindex3(w, xyz, obj.res);
+//     ff =  _x - wi[1];
+//     ff += _y - wi[2];
+//     ff += _z - wi[3];
+//     setindex(f, ff, xyz, obj.res);
+// }

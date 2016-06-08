@@ -32,3 +32,11 @@ int3 mod(int3 a, int3 m){
     return a - m*convert_int3(floor(convert_float3(a)/convert_float3(m)));
 }
 float angle(cfloat_t z){return atan2(z.imag, z.real);}
+
+
+int3 get_global_id3(){
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int z = get_global_id(2);
+    return int3(x,y,z)+1; // to make porting easier, we use based 1 indexing
+}
