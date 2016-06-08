@@ -5,16 +5,7 @@ using GLVisualize, GeometryTypes, GLWindow, GLAbstraction, Colors, GLFW, ModernG
 # An example of incompressible Schroedinger flow producing a jet.
 #
 ## PARAMETERS
-function mix_linearly{C<:Colorant}(a::C, b::C, s)
-    RGBA{Float32}((1-s)*comp1(a)+s*comp1(b), (1-s)*comp2(a)+s*comp2(b), (1-s)*comp3(a)+s*comp3(b), 1.)
-end
-function color_lookup(, cmap, color_norm)
-    mi,ma = color_norm
-    scaled = clamp((value-mi)/(ma-mi), 0, 1)
-    index = scaled * (length(cmap)-1)
-    i_a, i_b = floor(Int, index)+1, ceil(Int, index)+1
-    mix_linearly(cmap[i_a], cmap[i_b], scaled)
-end
+
 
 function GeometryTypes.isinside(point, lower, upper)
     @inbounds for (p,l,u) in zip(point, lower, upper)
@@ -132,7 +123,7 @@ function main()
 
     lines_ram = fill(Point3f0(0), max_history, max_particles)
     lines_color_ram = fill(RGBA{Float32}(0,0,0,0), max_history, max_particles)
-    cmap = RGBA{Float32}[RGBA{Float32}(0,1,0,0.4), RGBA{Float32}(1,0,0,1)]
+    cmap = RGBA{Float32}[RGBA{Float32}(0,1,0,0.1), RGBA{Float32}(1,0,0,1)]
     # ma
     lines3d = view(
         visualize(
@@ -203,7 +194,7 @@ function main()
             len = norm(Vec3f0(vx[i], vy[i], vz[i]))
 
             lines_color_ram[:, i] = circshift(lines_color_ram[:, i], 1)
-            lines_color_ram[1, i] = color_lookup(len, cmap, (0,0.5))
+            lines_color_ram[1, i] = color_lookup(cmap, len, 0,0.5)
         end
 
         update!(lines_gpu, vec(lines_ram))
@@ -211,9 +202,7 @@ function main()
         render_frame(w)
         GLFW.PollEvents()
     end
-    # empty!(w)
-    # yield()
-    # GLFW.DestroyWindow(GLWindow.nativewindow(w))
+    destroy!(w)
     #create_video(frames, "test2", pwd(), 1)
 end
 
