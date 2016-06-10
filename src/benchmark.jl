@@ -41,7 +41,7 @@ function devec_div(ds, res, v, f)
     end
     f
 end
-function compilekernel(ctx, source, kernel)
+function compileprogram(ctx, source)
     program = cl.Program(ctx, source=source)
     cl.build!(program, raise=false)
     for (dev, status) in cl.info(program, :build_status)
@@ -56,7 +56,7 @@ function compilekernel(ctx, source, kernel)
     cl.Kernel(program, kernel)
 end
 
-cl_kernel = readstring("benchkernel.cl")
+
 kernel_cpu = compilekernel(ctx_cpu, cl_kernel, "Div")
 kernel_gpu = compilekernel(ctx_gpu, cl_kernel, "Div")
 
