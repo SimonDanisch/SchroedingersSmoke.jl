@@ -1,4 +1,4 @@
-using SchroedingersSmoke, Reactive
+using SchroedingersSmoke, Reactive, GLPlot
 using GLVisualize, GeometryTypes, GLWindow, GLAbstraction, Colors, GLFW, ModernGL
 
 # example_jet
@@ -106,44 +106,41 @@ function main()
         line_indices
     end
     ## SET PARTICLES
+    bb = AABB{Float32}(Vec3f0(0), Vec3f0(vol_size))
     particle = Particles(
         zeros(Float32, max_particles),
         zeros(Float32, max_particles),
         zeros(Float32, max_particles),
         0, value(active_particles)
     )
-    w=glscreen()
-    view(
-        visualize(
-            (Circle(Point2f0(0), 0.006f0), (particle.x, particle.y, particle.z)),
-            billboard=true, indices=active_particles
-        ),
-        camera=:perspective
+    particle_vis = glplot(
+        (Circle(Point3f0(0), 0.006f0), (particle.x, particle.y, particle.z)),
+        boundingbox=bb,
+        billboard=true, indices=active_particles
     )
 
     lines_ram = fill(Point3f0(0), max_history, max_particles)
     lines_color_ram = fill(RGBA{Float32}(0,0,0,0), max_history, max_particles)
     cmap = RGBA{Float32}[RGBA{Float32}(0,1,0,0.1), RGBA{Float32}(1,0,0,1)]
     # ma
-    lines3d = view(
-        visualize(
-            vec(lines_ram), :lines,
-            color = vec(lines_color_ram),
-            dims=Vec{2,UInt32}(max_history, max_particles),
-            indices=active_lines, thickness=0.3f0
-        ), camera=:perspective
+    lines3d = glplot(
+        vec(lines_ram), :lines,
+        color = vec(lines_color_ram),
+        dims=Vec{2,UInt32}(max_history, max_particles),
+        boundingbox=bb,
+        indices=active_lines, thickness=0.3f0,
+        preferred_camera=:perspective
     )
 
-    lines_gpu = renderlist(w)[2][:vertex]
-    lines_color_gpu = renderlist(w)[2][:color]
+    lines_gpu = lines3d[:vertex]
+    lines_color_gpu = lines3d[:color]
 
     #gpu_velocity = renderlist(w)[1][:rotation]
-    gpu_position_x = renderlist(w)[1][:position_x]
-    gpu_position_y = renderlist(w)[1][:position_y]
-    gpu_position_z = renderlist(w)[1][:position_z]
+    gpu_position_x = particle_vis[:position_x]
+    gpu_position_y = particle_vis[:position_y]
+    gpu_position_z = particle_vis[:position_z]
 
-    for iter = 1:2000
-        isopen(w) || break
+    @async for iter = 1:2000
         t = iter*dt
         # incompressible Schroedinger flow
         psi1, psi2 = SchroedingerFlow(isf, psi1,psi2)
@@ -199,10 +196,8 @@ function main()
 
         update!(lines_gpu, vec(lines_ram))
         update!(lines_color_gpu, vec(lines_color_ram))
-        render_frame(w)
-        GLFW.PollEvents()
+        yield()
     end
-    destroy!(w)
     #create_video(frames, "test2", pwd(), 1)
 end
 
