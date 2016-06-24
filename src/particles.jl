@@ -1,37 +1,12 @@
-
-function StaggeredAdvect(particle, torus, velocity, dt)
-    k1 = copy(particle.xyz)
-    StaggeredVelocity(k1, torus, velocity)
-
-    k2 = particle.xyz + (k1*dt/2)
-    StaggeredVelocity(k2, torus, velocity)
-
-    k3 = particle.xyz+k2*dt/2
-    StaggeredVelocity(k3, torus, velocity)
-
-    k4 = particle.xyz+k3*dt
-    StaggeredVelocity(k4, torus, velocity)
-
-    sum_staggering(particles, k1, k2, k3, k4, res, dt ./ 6f0)
+type Particles
+    xyz::Vector{Point3f0}
+    length::Int
+    active::Vector{Int}
 end
-
-
-@cl_kernel(program_particle, StaggeredVelocity,
-    particles, velocity, dinv, d, tsize, resp
+@cl_kernel(StaggeredAdvect, program_particle,
+    velocity, particles, dt, d, tsize, res
 )
 
-@cl_kernel(program_particle, sum_staggering,
-    particles,k1,k2,k3,k4,res,dt
-)
-"""
- evaluates velocity at (px,py,pz) in the grid torus with staggered
- velocity vector field vx,vy,vz
-"""
-function StaggeredVelocity(particles, torus, velocity, out)
-    dinv = 1f0./d
-    StaggeredVelocity(
-        particles, velocity,
-        dinv, torus.d, torus.size, torus.res
-    )
-    nothing
+function StaggeredAdvect(obj::ISF, p::Particles, dt)
+    StaggeredAdvect(obj.velocity, p.xyz, dt, obj.d, obj.res)
 end

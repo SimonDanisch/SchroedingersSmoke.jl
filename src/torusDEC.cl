@@ -1,12 +1,9 @@
-
-
-
 __kernel void Div(
         __global const float* velocity,
-        __global float* f
+        __global float* f,
 
         const int3 res,
-        const float3 d,
+        const float3 d
     ){
     float3 vn, v, ff;
     int3 i, im;
@@ -21,19 +18,32 @@ __kernel void Div(
 
     ff = (v - vn) * d;
 
-    setindex(f, ff.x+ff.y+ff.z, xyz, res);
+    setindex(f, ff.x+ff.y+ff.z, i, res);
 }
 
 __kernel void StaggeredSharp(
         __global const float* velocity,
-        const int3 res
-        const float3 d_inverse,
+        const int3 res,
+        const float3 d_inverse
     ){
     int3 xyz = get_global_id3();
-    setindex3(velocity, getindex3(velocity, xyz, res) .* d, xyz, res);
+    setindex3(velocity, getindex3(velocity, xyz, res) * d_inverse, xyz, res);
 }
 
-
+__kernel void cl_mul(
+        __global float* a,
+        __global const float* b
+    ){
+    int i = get_global_id(0);
+    a[i] = a[i] * b[i];
+}
+__kernel void cl_mul_cf(
+        __global float* a,
+        __global const float* b
+    ){
+    int3 i = get_global_id3();
+    setindexcf(a, cfloat_mul(getindexcf(a, i), getindexcf(b, i)), i);
+}
 // __kernel void Div(
 //         __global const float* velocity,
 //         __global float* f,

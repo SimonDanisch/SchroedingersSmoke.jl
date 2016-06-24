@@ -2,9 +2,9 @@ type ISF{T}
     t::TorusDEC
     hbar::T             # reduced Planck constant
     dt::T               # time step
-    SchroedingerMask::CLArray{Complex{T},3} # Fourier coefficient for solving Schroedinger eq
-    psi::NTuple{2, CLArray{Complex{T}, 3}}
-    velocity::CLArray{Vec3f0, 3}
+    SchroedingerMask::cl.CLArray{Complex{T},3} # Fourier coefficient for solving Schroedinger eq
+    psi::NTuple{2, cl.CLArray{Complex{T}, 3}}
+    velocity::cl.CLArray{Vec3f0, 3}
     function ISF(t, hbar, dt)
         isf = new{T}(t, hbar, dt)
         BuildSchroedinger(isf)
@@ -50,7 +50,7 @@ function PressureProject(obj, psi1, psi2)
 end
 
 
-@cl_kernel program_ISF VelocityOneForm psi1, psi2, velocity, hbar
+@cl_kernel VelocityOneForm program_ISF psi1 psi2 velocity hbar
 
 function VelocityOneForm(obj, psi1, psi2, hbar=1.0f0)
     velocity = obj.t.velocity
@@ -59,7 +59,7 @@ function VelocityOneForm(obj, psi1, psi2, hbar=1.0f0)
 end
 
 
-@cl_kernel program_ISF GaugeTransform psi1, psi2, q
+@cl_kernel GaugeTransform program_ISF psi1 psi2 q
 
 
-@cl_kernel program_ISF Normalize psi1, psi2
+@cl_kernel Normalize program_ISF psi1 psi2

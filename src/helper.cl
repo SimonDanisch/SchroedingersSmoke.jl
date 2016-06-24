@@ -19,11 +19,11 @@ void setindex(__global float* p, float value, int3 xyz, int3 size){
     p[sub2ind3D(size, xyz)] = value;
 }
 
-c_float_t getindexfc(__global const float* p, int3 xyz, int3 size){
+cfloat_t getindexcf(__global const float* p, int3 xyz, int3 size){
     float2 c = vload2(sub2ind3D(size, xyz), p);
-    return (c_float_t)(c.x, c.y);
+    return cfloat_new(c.x, c.y);
 }
-void setindexfc(__global float* p, c_float_t value, int3 xyz, int3 size){
+void setindexcf(__global float* p, cfloat_t value, int3 xyz, int3 size){
     float2 v = (float2)(value.real, value.imag);
     vstore2(v, sub2ind3D(size, xyz), p);
 }
@@ -31,6 +31,15 @@ void setindexfc(__global float* p, c_float_t value, int3 xyz, int3 size){
 int3 mod(int3 a, int3 m){
     return a - m*convert_int3(floor(convert_float3(a)/convert_float3(m)));
 }
+
+
+int3 conv_f3i3(float3 a){
+    return (int3)(convert_int(a.x), convert_int(a.y), convert_int(a.z));
+}
+int3 modfi(float3 a, int3 m){
+    return conv_f3i3(a) - m*convert_int3(floor(a/convert_float3(m)));
+}
+
 float angle(cfloat_t z){return atan2(z.imag, z.real);}
 
 
@@ -38,11 +47,12 @@ int3 get_global_id3(){
     int x = get_global_id(0);
     int y = get_global_id(1);
     int z = get_global_id(2);
-    return int3(x,y,z)+1; // to make porting easier, we use based 1 indexing
+    return (int3)(x,y,z)+1; // to make porting easier, we use based 1 indexing
 }
 
 
 
+/*
 
 
 void cufftShift_3D_slice_kernel(
@@ -77,7 +87,7 @@ void cufftShift_3D_slice_kernel(
     // Thread Index Converted into 1D Index
     int index = (zIndex * sSlice) + (yIndex * sLine) + xIndex;
 
-    c_float_t regTemp;
+    cfloat_t regTemp;
 
     if (zIndex < N / 2)
     {
@@ -135,3 +145,4 @@ __kernel__ void cufftShift_3D_kernel(float* data, int N, int3 block, int3 grid)
     int3 id = get_global_id3();
     cufftShift_3D_slice_kernel(data, N, id.x, id.yz);
 }
+*/

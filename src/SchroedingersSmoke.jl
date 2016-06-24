@@ -1,6 +1,6 @@
 module SchroedingersSmoke
 using GeometryTypes
-import OpenCL
+include("cl_helper.jl")
 
 # matlab compat functions
 """
@@ -42,26 +42,6 @@ function ndgrid{T}(vs::AbstractVector{T}...)
     out
 end
 
-
-const cl = OpenCL
-
-const device = first(cl.devices(:gpu))
-const ctx    = cl.Context(device_gpu)
-const queue  = cl.CmdQueue(ctx_gpu)
-
-const program_ISF = compileprogram(ctx, readstring("ISF.cl"))
-const program_torusDEC = compileprogram(ctx, readstring("torusDEC.cl"))
-const program_particle = compileprogram(ctx, readstring("particle.cl"))
-
-macro cl_kernel(name, program, args...)
-    kernel = gensym(name)
-    quote
-        const $kernel = cl.Kernel($program, $(string(name))
-        function $name($(args...))
-            cl.call($queue, $kernel, size($(args[1])), nothing, $(args...))
-        end
-    end
-end
 
 include("torusDEC.jl")
 include("ISF.jl")
