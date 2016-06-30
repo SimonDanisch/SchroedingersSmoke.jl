@@ -2,7 +2,6 @@
 type TorusDEC
     p::cl.CLArray{Point3f0,3}          # coordinates of grid points
     fac::cl.CLArray{Float32, 3}
-    ix::UnitRange{Int}; iy::UnitRange{Int}; iz::UnitRange{Int}          # 1D index array
     iix::Array{Int, 3}; iiy::Array{Int, 3}; iiz::Array{Int, 3}         # 3D index array
     d::Vector{Float32}          # edge length
     size::Vector{Int32} # size of grid
@@ -11,24 +10,20 @@ type TorusDEC
 
     function TorusDEC(vol_size::NTuple{3}, vol_res::NTuple{3})
         obj = new()
-        obj.sizex,obj.sizey, obj.sizez = vol_size
-        obj.resx = round(Int, vol_res[1])
-        obj.resy = round(Int, vol_res[2])
-        obj.resz = round(Int, vol_res[3])
-        obj.dx = obj.sizex/obj.resx
-        obj.dy = obj.sizey/obj.resy
-        obj.dz = obj.sizez/obj.resz
+        obj.size = Int32[vol_size...]
+        obj.res = Int32[round(Int, vol_res[i]) for i=1:3]
+        obj.d = Float32[obj.size[i]/obj.res[i] for i=1:3]
 
-        ix, iy, iz = 1:obj.resx, 1:obj.resy, 1:obj.resz
+        ix, iy, iz = ntuple(i->1:obj.res[i], 3)
 
         obj.iix, obj.iiy, obj.iiz = ndgrid(ix, iy, iz)
-        obj.px = cl.CLArray((obj.iix-1)*obj.dx)
-        obj.py = cl.CLArray((obj.iiy-1)*obj.dy)
-        obj.pz = cl.CLArray((obj.iiz-1)*obj.dz)
+        obj.px = cl.CLArray((obj.iix-1)*obj.d[1])
+        obj.py = cl.CLArray((obj.iiy-1)*obj.d[2])
+        obj.pz = cl.CLArray((obj.iiz-1)*obj.d[3])
 
-        sx = sin(pi*(obj.iix-1)/obj.resx)/obj.dx
-        sy = sin(pi*(obj.iiy-1)/obj.resy)/obj.dy
-        sz = sin(pi*(obj.iiz-1)/obj.resz)/obj.dz
+        sx = sin(pi*(obj.iix-1)/obj.resx)/obj.d[1]
+        sy = sin(pi*(obj.iiy-1)/obj.resy)/obj.d[2]
+        sz = sin(pi*(obj.iiz-1)/obj.resz)/obj.d[3]
         denom = sx.^2 + sy.^2 + sz.^2
         fac = -0.25./denom
         fac[1,1,1] = 0.0

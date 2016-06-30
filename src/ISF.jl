@@ -17,11 +17,11 @@ ISF{T}(t, hbar::T, dt::T) = ISF{T}(t, hbar, dt)
 builds coefficients in Fourier space.
 """
 function BuildSchroedinger(obj::ISF)
-    nx=obj.t.resx; ny=obj.t.resy; nz=obj.t.resz
+    nx, ny, nz=obj.res
     fac = -4*pi^2*obj.hbar
-    kx = (obj.t.iix-1-nx/2)/(obj.t.sizex)
-    ky = (obj.t.iiy-1-ny/2)/(obj.t.sizey)
-    kz = (obj.t.iiz-1-nz/2)/(obj.t.sizez)
+    kx = (obj.t.iix-1-nx/2)/(obj.t.size[1])
+    ky = (obj.t.iiy-1-ny/2)/(obj.t.size[2])
+    kz = (obj.t.iiz-1-nz/2)/(obj.t.size[3])
     lambda = fac*(kx.^2+ky.^2+kz.^2)
     obj.SchroedingerMask = CLArray(ifftshift(exp(1f0*im*lambda*obj.dt/2.)))
 end

@@ -15,19 +15,19 @@ function compileprogram(ctx, source)
 	source = cl_helpers*source
     program = cl.Program(ctx, source=source)
     cl.build!(program, raise=false)
-    for (dev, status) in cl.info(program, :build_status)
-        dict = cl.info(program, :build_log)
-		println(length(split(cl_helpers, "\n")))
-        for (k,v) in dict
-            println(k)
-            println(v)
-        end
-    end
+  #   for (dev, status) in cl.info(program, :build_status)
+  #       dict = cl.info(program, :build_log)
+		# println(length(split(cl_helpers, "\n")))
+  #       for (k,v) in dict
+  #           println(k)
+  #           println(v)
+  #       end
+  #   end
     program
 end
 
-
 const program_ISF = compileprogram(ctx, readshader("ISF.cl"))
+
 const program_torusDEC = compileprogram(ctx, readshader("torusDEC.cl"))
 const program_particle = compileprogram(ctx, readshader("particle.cl"))
 

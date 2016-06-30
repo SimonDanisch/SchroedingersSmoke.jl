@@ -37,13 +37,21 @@ __kernel void cl_mul(
     int i = get_global_id(0);
     a[i] = a[i] * b[i];
 }
+
 __kernel void cl_mul_cf(
         __global float* a,
         __global const float* b
     ){
-    int3 i = get_global_id3();
-    setindexcf(a, cfloat_mul(getindexcf(a, i), getindexcf(b, i)), i);
+    int i = get_global_id(0);
+    float2 af2 = vload2(i, a);
+    float2 bf2 = vload2(i, b);
+    cfloat_t ac = cfloat_new(af2.x, af2.y);
+    cfloat_t bc = cfloat_new(bf2.x, bf2.y);
+    cfloat_t r  = cfloat_mul(ac, bc);
+    float2 rf2  = (float2)(r.real, r.imag);
+    vstore2(rf2, i, a);
 }
+
 // __kernel void Div(
 //         __global const float* velocity,
 //         __global float* f,
