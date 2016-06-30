@@ -124,7 +124,7 @@ function AddCircle(obj, psi, center, normal, r, d)
     inLayerM = z<=0 & z>=-d/2 & inCylinder
     alpha[inLayerP] = -pi*(2*z(inLayerP)/d - 1)
     alpha[inLayerM] = -pi*(2*z(inLayerM)/d + 1)
-    psi.*exp(1.im*alpha);
+    psi.*exp(1.0im*alpha);
 end
 
 """
