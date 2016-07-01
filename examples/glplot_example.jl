@@ -2,7 +2,7 @@ using SchroedingersSmoke, Reactive, GLPlot
 using GLVisualize, GeometryTypes, GLWindow, GLAbstraction, Colors, GLFW, ModernGL
 
 Base.FFTW.set_num_threads(4)
-BLAS.set_num_threads(4)
+Base.BLAS.set_num_threads(4)
 
 # example_jet
 # An example of incompressible Schroedinger flow producing a jet.
