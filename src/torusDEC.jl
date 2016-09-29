@@ -133,115 +133,28 @@ type TorusDEC
     end
 end
 
-
-"""
- For a function f compute the 1-form df
-"""
-function DerivativeOfFunction{T}(obj::TorusDEC, f::Array{T, 3})
-    v = Array(Point3f0, size(f))
-    for z=obj.iz, y=obj.iy, x=obj.ix
-        ixp = mod(x, obj.resx) + 1
-        iyp = mod(y, obj.resy) + 1
-        izp = mod(z, obj.resz) + 1
-        ff = f[x,y,z]
-        v[x,y,z] = Point3f0(
-            f[ixp,y,z] - ff,
-            f[x,iyp,z] - ff,
-            f[x,y,izp] - ff,
-        )
-    end
-    v
-end
-
-"""
- For a 1-form v compute the 2-form dv
-"""
-function DerivativeOfOneForm(obj::TorusDEC, velocity)
-    w = similar(velocity)
-    @inbounds for z=obj.iz, y=obj.iy, x=obj.ix
-        ixp = mod(x, obj.resx) + 1
-        iyp = mod(y, obj.resy) + 1
-        izp = mod(z, obj.resz) + 1
-
-        x1 = velocity[x, y, izp][1]
-        y1 = velocity[ixp, y, z][2]
-        z1 = velocity[x, iyp, z][3]
-
-        x2 = velocity[x, iyp, z][1]
-        y2 = velocity[x, y, izp][2]
-        z2 = velocity[ixp, y, z][3]
-
-        v = velocity[x,y,z]
-        w[x,y,z] = Point3f0(
-            v[1] - x1 + x2 - v[1],
-            v[2] - y1 + y2 - v[2],
-            v[3] - z1 + z2 - v[3]
-        )
-    end
-    w
-end
-
-"""
- For a 2-form w compute the 3-form dw
-"""
-function DerivativeOfTwoForm(obj::TorusDEC, w)
-    f = Array(Float64, size(w))
-    @inbounds for z=obj.iz, y=obj.iy, x=obj.ix
-        ixp = mod(x, obj.resx) + 1
-        iyp = mod(y, obj.resy) + 1
-        izp = mod(z, obj.resz) + 1
-        x = w[ixp, y, z][1]
-        y = w[x, iyp, z][2]
-        z = w[x, y, izp][3]
-        wi = w[x,y,z]
-        ff =  x - wi[1]
-        ff += y - wi[2]
-        ff += z - wi[3]
-        f[x,y,z] = ff
-    end
-    f
-end
-
 """
 For a 1-form v compute the function `*d*v`
 """
-function Div(obj::TorusDEC, velocity)
-    f = Array(Float64, size(velocity))
-    @inbounds for z=obj.iz, y=obj.iy, x=obj.ix
+function Div(obj::TorusDEC, velocity, f)
+    map_idx!(f, velocity) do idx, velocity
+        x,y,z = idx.I # cartesian index
         ixm = mod(x-2, obj.resx) + 1
         iym = mod(y-2, obj.resy) + 1
         izm = mod(z-2, obj.resz) + 1
         _x = velocity[ixm, y, z][1]
         _y = velocity[x, iym, z][2]
         _z = velocity[x, y, izm][3]
-        v = velocity[x,y,z]
+        v  = velocity[x,y,z]
         ff =  (v[1] - _x) / obj.dx^2
         ff += (v[2] - _y) / obj.dy^2
         ff += (v[3] - _z) / obj.dz^2
-        f[x,y,z] = ff
+        ff
     end
     f
 end
 
-"""
- For a 1-form v compute the corresponding vector field v^sharp by
- averaging to vertices
-"""
 
-function Sharp(obj::TorusDEC, velocity)
-    d = 1f0/Point3f0(obj.dx, obj.dy, obj.dz)
-    u = similar(velocity)
-    @inbounds for z=obj.iz, y=obj.iy, x=obj.ix
-        ixm = mod(x-2, obj.resx) + 1
-        iym = mod(y-2, obj.resy) + 1
-        izm = mod(z-2, obj.resz) + 1
-        x = velocity[ixm, y, z][1]
-        y = velocity[x, iym, z][2]
-        z = velocity[x, y, izm][3]
-        u[x,y,z] = 0.5*Point3f0(x,y,z)+velocity[x,y,z].*d
-    end
-    u
-end
 
 """
  For a 1-form v compute the corresponding vector field `v^sharp` as
@@ -249,9 +162,7 @@ end
 """
 function StaggeredSharp(obj::TorusDEC, velocity)
     d = 1f0/Point3f0(obj.dx, obj.dy, obj.dz)
-    @inbounds for i in eachindex(velocity)
-        velocity[i] = velocity[i] .* d
-    end
+    velocity .= (*).(velocity, d)
     velocity
 end
 
@@ -260,9 +171,7 @@ PoissonSolve by Spectral method
 """
 function PoissonSolve(obj, f)
     fc = fft(f)
-    @inbounds for i=1:length(obj.fac)
-        fc[i] = fc[i] .* obj.fac[i]
-    end
+    fc .= (*).(fc, obj.fac)
     ifft!(fc)
     fc
 end
