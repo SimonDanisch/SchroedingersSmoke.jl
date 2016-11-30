@@ -92,16 +92,16 @@ function VelocityOneForm(obj, psi1, psi2, hbar=1.0)
     iyp = mod(obj.t.iy, obj.t.resy) + 1;
     izp = mod(obj.t.iz, obj.t.resz) + 1;
     vx = angle(
-        conj(psi1).*sub(psi1, ixp,:,:) +
-        conj(psi2).*sub(psi2, ixp,:,:)
+        conj(psi1).*view(psi1, ixp,:,:) +
+        conj(psi2).*view(psi2, ixp,:,:)
     );
     vy = angle(
-        conj(psi1).*sub(psi1,:,iyp,:) +
-        conj(psi2).*sub(psi2,:,iyp,:)
+        conj(psi1).*view(psi1,:,iyp,:) +
+        conj(psi2).*view(psi2,:,iyp,:)
     )
     vz = angle(
-        conj(psi1).*sub(psi1,:,:,izp) +
-        conj(psi2).*sub(psi2,:,:,izp)
+        conj(psi1).*view(psi1,:,:,izp) +
+        conj(psi2).*view(psi2,:,:,izp)
     )
     vx = vx*hbar;
     vy = vy*hbar;

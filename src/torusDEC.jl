@@ -132,9 +132,9 @@ function DerivativeOfFunction{T}(obj::TorusDEC, f::Array{T, 3})
     ixp = mod(obj.ix, obj.resx) + 1
     iyp = mod(obj.iy, obj.resy) + 1
     izp = mod(obj.iz, obj.resz) + 1
-    vx = sub(f, ixp,:,:) - f
-    vy = sub(f, :,iyp,:) - f
-    vz = sub(f, :,:,izp) - f
+    vx = view(f, ixp,:,:) - f
+    vy = view(f, :,iyp,:) - f
+    vz = view(f, :,:,izp) - f
     vx, vy, vz
 end
 
@@ -145,9 +145,9 @@ function DerivativeOfOneForm(obj::TorusDEC,vx,vy,vz)
     ixp = mod(obj.ix, obj.resx) + 1
     iyp = mod(obj.iy, obj.resy) + 1
     izp = mod(obj.iz, obj.resz) + 1
-    wx = vy - sub(vy, :,:,izp) + sub(vz, :,iyp,:) - vz
-    wy = vz - sub(vz, ixp,:,:) + sub(vx, :,:,izp) - vx
-    wz = vx - sub(vx, :,iyp,:) + sub(vy, ixp,:,:) - vy
+    wx = vy - view(vy, :,:,izp) + view(vz, :,iyp,:) - vz
+    wy = vz - view(vz, ixp,:,:) + view(vx, :,:,izp) - vx
+    wz = vx - view(vx, :,iyp,:) + view(vy, ixp,:,:) - vy
     wx,wy,wz
 end
 
@@ -158,9 +158,9 @@ function DerivativeOfTwoForm(obj::TorusDEC,wx,wy,wz)
     ixp = mod(obj.ix, obj.resx) + 1
     iyp = mod(obj.iy, obj.resy) + 1
     izp = mod(obj.iz, obj.resz) + 1
-    f =     sub(wx, ixp,:,:) - wx
-    f = f + sub(wy, :,iyp,:) - wy
-    f = f + sub(wz, :,:,izp) - wz
+    f =     view(wx, ixp,:,:) - wx
+    f = f + view(wy, :,iyp,:) - wy
+    f = f + view(wz, :,:,izp) - wz
     f
 end
 
@@ -171,9 +171,9 @@ function Div(obj::TorusDEC,vx,vy,vz)
     ixm = mod(obj.ix-2, obj.resx) + 1
     iym = mod(obj.iy-2, obj.resy) + 1
     izm = mod(obj.iz-2, obj.resz) + 1
-    f =     (vx - sub(vx, ixm,:,:))/(obj.dx^2)
-    f = f + (vy - sub(vy, :,iym,:))/(obj.dy^2)
-    f = f + (vz - sub(vz, :,:,izm))/(obj.dz^2)
+    f =     (vx - view(vx, ixm,:,:))/(obj.dx^2)
+    f = f + (vy - view(vy, :,iym,:))/(obj.dy^2)
+    f = f + (vz - view(vz, :,:,izm))/(obj.dz^2)
     f
 end
 
@@ -186,9 +186,9 @@ function Sharp(obj::TorusDEC,vx,vy,vz)
     ixm = mod(obj.ix-2, obj.resx) + 1
     iym = mod(obj.iy-2, obj.resy) + 1
     izm = mod(obj.iz-2, obj.resz) + 1
-    ux = 0.5*( sub(vx, ixm,:,:) + vx )/obj.dx
-    uy = 0.5*( sub(vy, :,iym,:) + vy )/obj.dy
-    uz = 0.5*( sub(vz, :,:,izm) + vz )/obj.dz
+    ux = 0.5*( view(vx, ixm,:,:) + vx )/obj.dx
+    uy = 0.5*( view(vy, :,iym,:) + vy )/obj.dy
+    uz = 0.5*( view(vz, :,:,izm) + vz )/obj.dz
     ux,uy,uz
 end
 
