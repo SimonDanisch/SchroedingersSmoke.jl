@@ -1,33 +1,37 @@
 using GeometryTypes
 using StaticArrays
 
-function map_idx!(f, A::AbstractArray)
+function map_idx!{F, T}(f::F, A::AbstractArray, args::T)
     for x = 1:size(A, 1), y = 1:size(A, 2), z = 1:size(A, 3)
         idx = Vec{3, Int}(x, y, z)
-        val = f(idx)
+        val = f(idx, A, args)
         @inbounds A[x, y, z] = val
     end
     A
 end
 
-function velocity_one_form!(velocity, res, psi, hbar = 1.0f0)
-    map_idx!(velocity) do xyz
-        x, y, z = xyz
-        ix, iy, iz = mod.(xyz, res) + 1
-        @inbounds begin
-            psi1,  psi2  = psi[x,  y,  z]
-            psix1, psix2 = psi[ix, y,  z]
-            psiy1, psiy2 = psi[x,  iy ,z]
-            psiz1, psiz2 = psi[x,  y,  iz]
-        end
-        psi1n = Vec(psix1, psiy1, psiz1)
-        psi2n = Vec(psix2, psiy2, psiz2)
-        angle.(
-            conj(psi1) .* psi1n .+
-            conj(psi2) .* psi2n
-        ) * hbar
+
+@inline function inner_velocity_one_form(i, velocity, res_psi_hbar)
+    res, psi1, psi2, hbar = res_psi_hbar
+    i2 = mod.(i, res) + 1
+    @inbounds begin
+        psi12  = psi[i[1],  i[2],  i[3]]
+        psix12 = psi[i2[1], i[2],  i[3]]
+        psiy12 = psi[i[1],  i2[2] ,i[3]]
+        psiz12 = psi[i[1],  i[2],  i2[3]]
     end
+    psi1n = Vec(psix12[1], psiy12[1], psiz12[1])
+    psi2n = Vec(psix12[2], psiy12[2], psiz12[2])
+    angle.(
+        conj(psi12[1]) .* psi1n .+
+        conj(psi12[2]) .* psi2n
+    ) * hbar
 end
+function velocity_one_form!(velocity, res, psi, hbar = 1.0f0)
+    map_idx!(inner_velocity_one_form, velocity, (res, psi, hbar))
+end
+
+
 
 function gauge_transform!(psi, q)
     broadcast!(psi, psi, q) do psi, q
@@ -195,8 +199,39 @@ fac[1,1,1] = 0
 
 f_tmp = zeros(Float32, dims)
 velocity = zeros(Vec3f0, dims)
-psi = [(one(Complex64), one(Complex64) * 0.1)
+psi = [(one(Complex64), one(Complex64) * 0.1f0)
 for i=1:dims[1], j=1:dims[2], k=1:dims[3]]
+
+using BenchmarkTools
+
+
+
+@benchmark inner_velocity_one_form($(Vec(1,2,3)), $(velocity), $(res), $(psi), $(1f0))
+function VelocityOneForm(ix,iy, iz, resx, resy, resz, psi1, psi2, hbar=1.0)
+    ixp = mod(ix, resx) + 1;
+    iyp = mod(iy, resy) + 1;
+    izp = mod(iz, resz) + 1;
+    vx = angle(
+        conj(psi1).*view(psi1, ixp,:,:) +
+        conj(psi2).*view(psi2, ixp,:,:)
+    );
+    vy = angle(
+        conj(psi1).*view(psi1,:,iyp,:) +
+        conj(psi2).*view(psi2,:,iyp,:)
+    )
+    vz = angle(
+        conj(psi1).*view(psi1,:,:,izp) +
+        conj(psi2).*view(psi2,:,:,izp)
+    )
+    vx = vx*hbar;
+    vy = vy*hbar;
+    vz = vz*hbar;
+    vx,vy,vz
+end
+psi1 = map(first, psi)
+psi2 = map(last, psi)
+@time VelocityOneForm(1:dims[1],1:dims[2],1:dims[3], res..., psi1, psi2, 1.0)
+@code_llvm map_idx!(inner_velocity_one_form, velocity, res, psi, 1f0)
 
 Normalize!(psi)
 
@@ -310,4 +345,23 @@ for i=1:1000
     set_arg!(particle_vis, :position, particle.xyz)
     set_arg!(particle_vis, :indices, map(x-> Cuint(x-1), particle.active))
     yield()
+end
+
+
+
+
+function test(velocity, res, psi, hbar)
+    @inbounds for i=1:
+    i2 = mod.(i, res) + 1
+    psi12  = psi[i[1],  i[2],  i[3]]
+    psix12 = psi[i2[1], i[2],  i[3]]
+    psiy12 = psi[i[1],  i2[2] ,i[3]]
+    psiz12 = psi[i[1],  i[2],  i2[3]]
+    psi1n = Vec(psix12[1], psiy12[1], psiz12[1])
+    psi2n = Vec(psix12[2], psiy12[2], psiz12[2])
+    angle.(
+        conj(psi12[1]) .* psi1n .+
+        conj(psi12[2]) .* psi2n
+    ) * hbar
+end
 end

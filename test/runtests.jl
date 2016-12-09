@@ -1,63 +1,34 @@
-using GPUArrays, CUDAnative
-import GPUArrays: GPUArray, CUBackend, cu_map
-cuctx = CUBackend.init()
 using GeometryTypes
-
-function VelocityOneForm(obj, psi, hbar=1.0f0)
-    map_idx!(obj.t.velocity, psi) do idx, psi
-        x,y,z = idx.I
-        ixp, iyp, izp = mod(Vec{3, Int}(idx.I), obj.t.res) + 1
-        @inbounds begin
-            psi1,  psi2  = psi[x,y,z]
-            psix1, psix2 = psi[ixp,y,z]
-            psiy1, psiy2 = psi[x,iyp,z]
-            psiz1, psiz2 = psi[x,y,izp]
+function test(velocity, res, psi, hbar)
+    @inbounds for z = 1:size(velocity, 3), y = 1:size(velocity, 2)
+        @simd for x = 1:size(velocity, 1)
+            i2 = mod.(Vec(x,y,z), res) + 1
+            psi12  = psi[x,  y,  z]
+            psix12 = psi[i2[1], y,  z]
+            psiy12 = psi[x,  i2[2] ,z]
+            psiz12 = psi[x,  y,  i2[3]]
+            psi1n = Vec(psix12[1], psiy12[1], psiz12[1])
+            psi2n = Vec(psix12[2], psiy12[2], psiz12[2])
+            velocity[x,y,z] = angle.(
+                conj(psi12[1]) .* psi1n .+
+                conj(psi12[2]) .* psi2n
+            ) * hbar
         end
-        psi1c = conj(psi1); psi2c = conj(psi2);
-        vx = angle(psi1c*psix1 + psi2c*psix2)
-        vy = angle(psi1c*psiy1 + psi2c.*psiy2)
-        vz = angle(psi1c*psiz1 + psi2c*psiz2)
-        Vec3f0(vx, vy, vz)*hbar
     end
-end
-function GaugeTransform(psi, q)
-    broadcast!(psi, psi, q) do psi, q
-        eiq = exp(1f0*im*q)
-        (psi[1]*eiq, psi[2]*eiq)
-    end
-    psi
-end
-function Div(obj::TorusDEC, velocity, f)
-    map_idx!(f, velocity) do idx, velocity
-        x,y,z = idx.I # cartesian index
-        ixm = mod(x-2, obj.resx) + 1
-        iym = mod(y-2, obj.resy) + 1
-        izm = mod(z-2, obj.resz) + 1
-        _x = velocity[ixm, y, z][1]
-        _y = velocity[x, iym, z][2]
-        _z = velocity[x, y, izm][3]
-        v  = velocity[x,y,z]
-        ff =  (v[1] - _x) / obj.dx^2
-        ff += (v[2] - _y) / obj.dy^2
-        ff += (v[3] - _z) / obj.dz^2
-        ff
-    end
-    f
-end
-function PoissonSolve(obj, f)
-    fc = fft(f)
-    fc .= (*).(fc, obj.fac)
-    ifft!(fc)
-    fc
-end
-function PressureProject(obj, psi)
-    velocity = VelocityOneForm(obj, psi)
-    div = Div(obj.t, velocity)
-    q = PoissonSolve(obj.t, div);
-    GaugeTransform(psi1, psi2, (-).(q))
 end
 
-n = 50
-psi_1_2 = GPUArray([(rand(Complex64), rand(Complex64)) for i=1:n, j=1:n, k=1:n]);
-s = GPUArray(zeros(Vec3f0, (n,n,n)))
-Hopf(psi_1_2, s)
+dims = (64, 32, 32)
+grid_res = Vec(dims)
+hbar = 0.1f0; dt = 1f0/48f0;
+grid_size = Vec(4, 2, 2)
+res = Vec(grid_res)
+
+velocity = zeros(Vec3f0, dims)
+psi = [(one(Complex64), one(Complex64) * 0.1f0)
+for i=1:dims[1], j=1:dims[2], k=1:dims[3]]
+
+using BenchmarkTools
+
+psi1 = map(first, psi)
+psi2 = map(last, psi)
+@time test(velocity, res, psi, 1f0)
