@@ -1,5 +1,5 @@
 Base.FFTW.set_num_threads(4)
-blas_set_num_threads(4)
+BLAS.set_num_threads(4)
 using SchroedingersSmoke, Reactive, GLPlot
 using GLVisualize, GeometryTypes, GLWindow, GLAbstraction, Colors, GLFW, ModernGL
 GLPlot.init()
@@ -202,40 +202,3 @@ function main()
 end
 
 main()
-
-
-
-using GLVisualize, GeometryTypes;w=glscreen();@async renderloop(w)
-using Colors, GLAbstraction
-empty!(w)
-N = 10
-r = linspace(0, 800, N)
-positions = Point2f0[(x, 0) for x in r]
-lines = fill(Point2f0(0), N, N)
-lines[1, :] = positions
-
-lines_color = fill(RGBA{Float32}(1,0,0,0), N, N)
-
-linesobj = visualize(
-    lines, :lines, dims=size(lines),
-    color = vec(lines_color), # needs to be 1D right now, to lessen the amount of automatic conversions
-    boundingbox=nothing,
-    thickness=3.0
-)
-_view(linesobj, camera=:orthographic_pixel)
-
-
-for t in 0.1:0.1:0.9
-    c = RGBA{Float32}(0, 0, t, 1)
-    for i=1:length(positions)
-        lines[:, i] = circshift(view(lines, :, i), 1)
-        lines[1, i] = Point2f0(r[i], t*300)
-        lines_color[:, i] = circshift(view(lines_color, :, i), 1)
-        lines_color[1, i] = c
-    end
-    set_arg!(linesobj, :vertex, vec(lines))
-    set_arg!(linesobj, :color, vec(lines_color))
-    sleep(0.1)
-    yield()
-end
-map(Tuple, lines[end, :])
