@@ -10,8 +10,7 @@ function map_idx!{F, T}(f::F, A::AbstractArray, args::T)
     A
 end
 
-
-@inline function inner_velocity_one_form(i, velocity, res_psi_hbar)
+function inner_velocity_one_form(i, velocity, res_psi_hbar)
     idx2, res, psi, hbar = res_psi_hbar
     i2 = (idx2[1][i[1]], idx2[2][i[2]], idx2[3][i[3]])
     @inbounds begin
@@ -119,12 +118,9 @@ function staggered_advect!(particle, velocity, dt, d, res, gridsize)
 end
 
 @inline function staggered_velocity(velocity, point, d, gs, res)
-    for i=1:3
-        (point[i] > 0 && point[i] < gs[i]) || return point
-    end
-    p   = (%).(Vec(point), gs)
+    p   = mod.(Vec(point), gs)
     i   = Vec{3, Int}(floor.(p ./ d)) + 1
-    ip  = (%).(i, res) + 1
+    ip  = mod.(i, res) + 1
 
     v0  = velocity[i[1], i[2], i[3]]
 
@@ -176,7 +172,7 @@ grid_size = Vec(4, 2, 2)
 res = Vec(grid_res)
 d = Vec3f0(grid_size ./ grid_res)
 ranges = Vec(ntuple(3) do i
-    linspace(0, grid_size[i], dims[i])
+    ((1:dims[i]) - 1) * d[i]
 end)
 idx2 = ntuple(3) do i
     mod(1:res[i], res[i]) + 1
@@ -209,10 +205,8 @@ fac[1,1,1] = 0
 
 f_tmp = zeros(Float32, dims)
 velocity = zeros(Vec3f0, dims)
-psi = [(one(Complex64), one(Complex64) * 0.1f0)
-for i=1:dims[1], j=1:dims[2], k=1:dims[3]]
+psi = [(one(Complex64), one(Complex64) * 0.01f0) for i=1:dims[1], j=1:dims[2], k=1:dims[3]]
 
-using BenchmarkTools
 idx2 = ntuple(3) do i
     mod(1:res[i], res[i]) + 1
 end
@@ -239,10 +233,11 @@ for iter = 1:10
     end
     pressure_project!(velocity, psi, idx2, fac, f_tmp, res, d)
 end
+
+
 using GLVisualize, GLAbstraction
 
 w = glscreen(); @async GLWindow.waiting_renderloop(w)
-
 
 particle = Particles(
     zeros(Point3f0, 10_000),
@@ -280,7 +275,7 @@ velocity_vis = visualize(
 function in_grid(i, particle = particle)
     p = particle.xyz[i]
     for i=1:3
-        p[1] >= 0 && p[1] <= grid_size[i] || return false
+        p[i] >= 0 && p[i] <= grid_size[i] || return false
     end
     true
 end
