@@ -1,56 +1,21 @@
 
-@inline function isjet(pos, nozzle_cen, nozzle_len, nozzle_rad)
-    (abs(pos[1] - nozzle_cen[1]) <= nozzle_len / 2) &
-    ((pos[2] - nozzle_cen[2])^2 +
-    (pos[3] - nozzle_cen[3])^2 <= nozzle_rad .^ 2) != 0
-end
+
 
 dims = (64, 32, 32)
+grid_size = Vec(4, 2, 2)
 grid_res = Vec(dims)
 hbar = 0.1f0; dt = 1f0/70f0;
-grid_size = Vec(4, 2, 2)
-res = Vec(grid_res)
 d = Vec3f0(grid_size ./ grid_res)
-ranges = Vec(ntuple(3) do i
-    linspace(0, grid_size[i], dims[i])
-end)
-idx2 = ntuple(3) do i
-    mod(1:res[i], res[i]) + 1
-end
 
 jet_velocity = Vec3f0(1, 0, 0)
 nozzle_cen = Vec3f0(2-1.7, 1-0.034, 1+0.066)
 nozzle_len = 0.5;
 nozzle_rad = 0.5;
-n_particles = 50
+n_particles = 10
 
 
-fac = zeros(Float32, dims)
-mask = zeros(Complex64, dims)
-f = -4 * pi^2 * hbar
-for x = 1:dims[1], y = 1:dims[2], z = 1:dims[3]
-    xyz = Vec(x, y, z)
-    # fac
-    s = sin(pi * (xyz - 1) ./ res) ./ d
-    denom = sum(s .^ 2)
-    fac[x,y,z] = -0.25f0 ./ denom
 
-    # schroedingers mask
-    k = (xyz - 1 - res ./ 2) ./ grid_size
-    lambda = f * sum(k .^ 2)
-    mask[x,y,z] = exp(1.0im * lambda * dt / 2)
-end
-fac[1,1,1] = 0
-
-f_tmp = zeros(Float32, dims)
-velocity = zeros(Vec3f0, dims)
-psi = [(one(Complex64), one(Complex64) * 0.1f0)
-for i=1:dims[1], j=1:dims[2], k=1:dims[3]]
-
-using BenchmarkTools
-idx2 = ntuple(3) do i
-    mod(1:res[i], res[i]) + 1
-end
+psi = [(one(Complex64), one(Complex64) * 0.01f0) for i=1:dims[1], j=1:dims[2], k=1:dims[3]]
 
 
 Normalize!(psi)
@@ -81,7 +46,7 @@ for iter = 1:10
         end
         _psi
     end
-    pressure_project!(velocity, psi, idx2, fac, f_tmp, res, d)
+    pressure_project!(velocity, psi, idx2, fac, f_tmp, grid_res, d)
 end
 
 
@@ -132,7 +97,7 @@ for i=1:1000
     # incompressable schroedinger flow
     schroedinger_flow!(psi, mask)
     Normalize!(psi)
-    pressure_project!(velocity, psi, idx2, fac, f_tmp, res, d)
+    pressure_project!(velocity, psi, idx2, fac, f_tmp, grid_res, d)
 
     # constrain velocity
     map_idx!(psi, ()) do xyz, psi, _
@@ -147,7 +112,8 @@ for i=1:1000
         end
         _psi
     end
-    pressure_project!(velocity, psi, idx2, fac, f_tmp, res, d)
+    pressure_project!(velocity, psi, idx2, fac, f_tmp, grid_res, d)
+
     set_arg!(velocity_vis, :rotation, vec(velocity))
 
     newp = Point3f0[begin
@@ -161,7 +127,7 @@ for i=1:1000
 
     append!(particle, newp)
     # advect and show particles
-    velocity_one_form!(velocity, idx2, res, psi)
+    velocity_one_form!(velocity, idx2, grid_res, psi)
     velocity .= (.*).(velocity, Scalar(inv.(d)))
     filter!(in_grid, particle.active)
     particle.length = length(particle.active)

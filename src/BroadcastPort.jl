@@ -3,6 +3,75 @@ module BroadcastPort
 using GeometryTypes
 using StaticArrays
 
+# lots of parameters. To lazy to write out types,
+# still don't want to waste performance
+type ISF{IntType, FloatType}
+    grid_res::Vec{3, IntType}
+    physical_size::Vec{3, IntType}
+    d::Vec{3, FloatType}
+    velocity::Array{Vec{3, FloatType}, 3}
+    # gridpoints in pysical size
+    ranges::Vec{3, Vector{FloatType}}
+
+
+    hbar::FloatType             # reduced Planck constant
+    dt::FloatType               # time step
+    mask::Array{Complex{FloatType}, 3} # Fourier coefficient for solving Schroedinger eq
+    # precalculated values
+    idx_shifted::Vec{3, Vector{IntType}} # indices shifted by one
+    fac::Array{Complex{FloatType}, 3}
+    # temporary allocations for intermediates
+    f::Array{FloatType, 3}
+
+    function ISF(physical_size, dims, hbar, dt)
+
+        VT = Vec{3, FloatType}
+        grid_res = Vec(dims)
+        physical_size = Vec(physical_size)
+        d = VT(physical_size ./ grid_res)
+        fac = zeros(FloatType, dims)
+        mask = zeros(Complex{FloatType}, dims)
+        f = -4 * pi^2 * hbar
+        for x = 1:dims[1], y = 1:dims[2], z = 1:dims[3]
+            xyz = Vec(x, y, z)
+            # fac
+            s = sin(pi * (xyz - 1) ./ grid_res) ./ d
+            denom = sum(s .^ 2)
+            fac[x,y,z] = -0.25f0 ./ denom
+
+            # schroedingers mask
+            k = (xyz - 1 - grid_res ./ 2) ./ physical_size
+            lambda = f * sum(k .^ 2)
+            mask[x,y,z] = exp(1.0im * lambda * dt / 2)
+        end
+        fac[1,1,1] = 0
+
+        f = zeros(FloatType, dims)
+        velocity = zeros(VT, dims)
+
+        ranges = Vec(ntuple(3) do i
+             ((1:dims[i]) - 1) * d[i]
+        end)
+        idx_shifted = Vec(ntuple(3) do i
+            mod(1:grid_res[i], grid_res[i]) + 1
+        end)
+        new(
+            grid_res,
+            physical_size,
+            d,
+            velocity,
+            ranges,
+            hbar,
+            dt,
+            mask,
+            idx_shifted,
+            fac,
+            f
+        )
+    end
+end
+
+# helper function to have a map but with random index manipulations
 function map_idx!{F, T}(f::F, A::AbstractArray, args::T)
     for x = 1:size(A, 1), y = 1:size(A, 2), z = 1:size(A, 3)
         idx = Vec{3, Int}(x, y, z)
@@ -12,8 +81,8 @@ function map_idx!{F, T}(f::F, A::AbstractArray, args::T)
     A
 end
 
-@inline function inner_velocity_one_form(i, velocity, res_psi_hbar)
-    idx2, res, psi, hbar = res_psi_hbar
+@inline function inner_velocity_one_form(i, velocity, idx_psi_hbar)
+    idx2, psi, hbar = idx_psi_hbar
     i2 = (idx2[1][i[1]], idx2[2][i[2]], idx2[3][i[3]])
     @inbounds begin
         psi12  = psi[i[1],  i[2],  i[3]]
@@ -29,9 +98,11 @@ end
     ) * hbar
 end
 
-function velocity_one_form!(velocity, idx2, res, psi, hbar = 1.0f0)
-    map_idx!(inner_velocity_one_form, velocity, (idx2, res, psi, hbar))
+function velocity_one_form!(isf, psi, hbar = 1.0f0)
+    arg = (isf.idx_shifted, psi, hbar)
+    map_idx!(inner_velocity_one_form, isf.velocity, arg)
 end
+
 
 function gauge_transform!(psi, q)
     broadcast!(psi, psi, q) do psi, q
@@ -40,13 +111,14 @@ function gauge_transform!(psi, q)
     end
 end
 
-function div!(f, res, d, velocity)
-    ds = inv.(d .^ 2)
-    map_idx!(f, ()) do xyz, f, _
+function div!(isf)
+    ds = inv.(isf.d .^ 2)
+    res = isf.grid_res
+    velocity = isf.velocity
+    map_idx!(isf.f, ()) do xyz, f, _
         @inbounds begin
             x, y, z = xyz
             ix, iy, iz = mod.(xyz - 2, res) + 1
-
             v1 = velocity[x,  y,  z]
             v2 = Vec(
                 velocity[ix, y,  z][1],
@@ -56,20 +128,20 @@ function div!(f, res, d, velocity)
         end
         sum((v1 .- v2) .* ds)
     end
-    f
+    return
 end
 
-function poisson_solve(fac, f)
-    fc = fft(f)
-    fc .= (*).(fc, fac)
+function poisson_solve(isf)
+    fc = fft(isf.f)
+    fc .= (*).(fc, isf.fac)
     ifft!(fc)
     fc
 end
 
-function pressure_project!(velocity, psi, idx2, fac, f, res, d)
-    velocity_one_form!(velocity, idx2, res, psi)
-    div!(f, res, d, velocity)
-    q = poisson_solve(fac, f)
+function pressure_project!(isf, psi)
+    velocity_one_form!(isf, psi)
+    div!(isf)
+    q = poisson_solve(isf)
     gauge_transform!(psi, q)
 end
 
@@ -83,25 +155,28 @@ function Normalize!(psi)
 end
 @inline twotuple(a, b) = (a, b)
 
-function schroedinger_flow!(psi, mask)
+function schroedinger_flow!(isf, psi)
     # extract single psi values into tmp arrays stored in obj
     psi1 = map(first, psi)
     psi2 = map(last, psi)
     psi1 = fftshift(fft(psi1)); psi2 = fftshift(fft(psi2));
-    psi1 .= (*).(psi1, mask)
-    psi2 .= (*).(psi2, mask)
+    psi1 .= (*).(psi1, isf.mask)
+    psi2 .= (*).(psi2, isf.mask)
     psi1 = ifft!(fftshift(psi1)); psi2 = ifft!(fftshift(psi2));
     psi .= twotuple.(psi1, psi2) # convert back
     psi
 end
 
-type Particles
-    xyz::Vector{Point3f0}
-    length::Int
-    active::Vector{Int}
+# simple statically allocated particle type
+type Particles{FloatType, IntType}
+    xyz::Vector{Point{3, FloatType}}
+    active::Vector{IntType}
 end
+Base.length(p::Particles) = length(p.active)
 
-function staggered_advect!(particle, velocity, dt, d, res, gridsize)
+function staggered_advect!(particle, isf)
+    velocity, dt, d, res = isf.velocity, isf.dt, isf.d, isf.grid_res
+    gridsize = isf.physical_size
     map!(particle) do p
 
         k1 = staggered_velocity(velocity, p, d, gridsize, res)
@@ -120,12 +195,9 @@ function staggered_advect!(particle, velocity, dt, d, res, gridsize)
 end
 
 @inline function staggered_velocity(velocity, point, d, gs, res)
-    for i=1:3
-        (point[i] > 0 && point[i] < gs[i]) || return point
-    end
-    p   = (%).(Vec(point), gs)
+    p   = mod.(Vec(point), gs)
     i   = Vec{3, Int}(floor.(p ./ d)) + 1
-    ip  = (%).(i, res) + 1
+    ip  = mod.(i, res) + 1
 
     v0  = velocity[i[1], i[2], i[3]]
 
@@ -152,17 +224,34 @@ end
 end
 
 
-
 function Base.append!(p::Particles, xyz)
-    @assert length(xyz) + p.length < length(p.xyz)
-    range = (p.length + 1):(p.length+length(xyz))
-    p.xyz[range] = xyz
-    p.length = (p.length+length(xyz))
+    inserted = 0
+    for i = 1:length(p.xyz) # reuse freed up indices
+        if !(i in p.active)
+            inserted += 1
+            p.xyz[i] = xyz[inserted]
+            push!(p.active, i)
+        end
+        inserted == length(xyz) && return
+    end
+    sort!(p.active)
+    length(xyz) == inserted && return
+    # We have more particles than `gaps`, meaning all gaps should be filled
+    # and length(p.active) == last(p.active)
+    @show inserted length(xyz)
+    @assert isempty(p.active) || (length(p.active) == last(p.active)) # lets just make sure of this
+    rest = length(xyz) - inserted
+    newlen = length(p.active) + rest
+    if newlen > length(p.xyz)
+        # we don't grow particles for now. Statically allocated, Remember?
+        warn("Not all particles are inserted, limit reached")
+        newlen = length(p.xyz)
+    end
+    range = (length(p.active)+1):newlen
+    p.xyz[range] = view(xyz, (inserted+1):length(xyz))
     append!(p.active, range)
-    nothing
+    return
 end
-Base.length(p::Particles) = p.length
-
 
 
 end
