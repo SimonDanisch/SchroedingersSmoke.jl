@@ -1,16 +1,18 @@
 Base.FFTW.set_num_threads(8)
-BLAS.set_num_threads(8)
-include("../../src/BroadcastPort.jl")
 
-using GeometryTypes, BroadcastPort, GLAbstraction, GLVisualize, StaticArrays, Colors
-import BroadcastPort: ISF, Normalize!, pressure_project!, Particles, staggered_advect!
-import BroadcastPort: velocity_one_form!, schroedinger_flow!, map_idx!
+using SchroedingersSmoke
+import SchroedingersSmoke.ParallelPort
 
+using GeometryTypes, GLAbstraction, GLVisualize, StaticArrays, Colors
 
-vol_size = (4,2,2)   # box size
+import ParallelPort: ISF, Normalize!, pressure_project!
+import ParallelPort: velocity_one_form!, schroedinger_flow!
+import ParallelPort: Particles, staggered_advect!, map_idx!
+
+vol_size = (4,2,2)# box size
 dims = (64,32,32) # volume resolution
-hbar = 0.1f0          # Planck constant
-dt = 1f0/48f0            # time step
+hbar = 0.1f0      # Planck constant
+dt = 1f0/48f0     # time step
 
 jet_velocity = Vec3f0(1, 0, 0)
 nozzle_cen = Vec3f0(2-1.7, 1-0.034, 1+0.066)
@@ -137,35 +139,7 @@ function simloop(
         yield()
     end
 end
-simloop(
+@time simloop(
     200, isf, psi, kvec, omega, n_particles,
     nozzle_rad, nozzle_cen, particle, particle_vis, velocity_vis
 )
-
-
-
-@noinline function checklength(x, y)
-    n = length(x)
-    if n == 0
-        error("empty map not supported")
-    end
-    if length(y) != length(x)
-        error("in and output arrays must have same length")
-    end
-    return n
-end
-
-function tmap!(f, y, x, z)
-    n = checklength(x, y)
-    Threads.@threads for i in 1:n
-        @inbounds y[i] = f(x[i], z[i])
-    end
-    return y
-end
-function test(a, b)
-    sin(cos(a)) / (b^4)
-end
-using BenchmarkTools
-r = zeros(10^6); x = rand(10^6); y = rand(10^6)
-b1 = @benchmark tmap!(test, r, x, y)
-b2 = @benchmark map!(test, r, x, y)

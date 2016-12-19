@@ -68,3 +68,8 @@ v1 = velocity_one_form!(velocity, psi);
 v2 = VelocityOneForm(psi1, psi2);
 
 all(isapprox.(v1, v2))
+
+using BenchmarkTools
+t1 = @benchmark velocity_one_form!($velocity, $psi);
+t2 = @benchmark VelocityOneForm($psi1, $psi2);
+judge(minimum(t1), minimum(t2))

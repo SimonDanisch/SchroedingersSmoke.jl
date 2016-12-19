@@ -22,6 +22,7 @@ type ISF{IntType, FloatType}
     fac::Array{Complex{FloatType}, 3}
     # temporary allocations for intermediates
     f::Array{FloatType, 3}
+    q::Array{Complex{FloatType}, 3}
 
     function ISF(physical_size, dims, hbar, dt)
 
@@ -66,20 +67,13 @@ type ISF{IntType, FloatType}
             mask,
             idx_shifted,
             fac,
-            f
+            f,
+            fft(f)
         )
     end
 end
 
 # helper function to have a map but with random index manipulations
-function map_idx!{F, T}(f::F, A::AbstractArray, args::T)
-    for x = 1:size(A, 1), y = 1:size(A, 2), z = 1:size(A, 3)
-        idx = Vec{3, Int}(x, y, z)
-        val = f(idx, A, args)
-        @inbounds A[x, y, z] = val
-    end
-    A
-end
 
 @inline function inner_velocity_one_form(i, velocity, idx_psi_hbar)
     idx2, psi, hbar = idx_psi_hbar
@@ -105,48 +99,40 @@ end
 
 
 function gauge_transform!(psi, q)
-    broadcast!(psi, psi, q) do psi, q
-        eiq = exp(1.0im * (-q))
-        (psi[1] * eiq, psi[2] * eiq)
-    end
+    eiq = exp(1.0im * (-q))
+    (psi[1] * eiq, psi[2] * eiq)
 end
 
+@inline function div_inner(xyz, velocity, res, ds)
+    x, y, z = xyz
+    ix, iy, iz = mod.(xyz - 2, res) + 1
+    v1 = velocity[x, y,  z]
+    v2 = Vec(
+        velocity[ix, y,  z][1],
+        velocity[x,  iy, z][2],
+        velocity[x,  y, iz][3]
+    )
+    sum((v1 .- v2) .* ds)
+end
 function div!(isf)
-    ds = inv.(isf.d .^ 2)
-    res = isf.grid_res
-    velocity = isf.velocity
-    map_idx!(isf.f, ()) do xyz, f, _
-        @inbounds begin
-            x, y, z = xyz
-            ix, iy, iz = mod.(xyz - 2, res) + 1
-            v1 = velocity[x,  y,  z]
-            v2 = Vec(
-                velocity[ix, y,  z][1],
-                velocity[x,  iy, z][2],
-                velocity[x,  y, iz][3]
-            )
-        end
-        sum((v1 .- v2) .* ds)
-    end
-    return
+    isf.f .= div_inner.(
+        isf.indices,
+        isf.velocity,
+        isf.grid_res,
+        inv.(isf.d .^ 2f0)
+    )
 end
 
-function poisson_solve(isf)
-    fc = fft(isf.f)
-    fc .= (*).(fc, isf.fac)
-    ifft!(fc)
-    fc
-end
 
 function pressure_project!(isf, psi)
     velocity_one_form!(isf, psi)
     div!(isf)
     q = poisson_solve(isf)
-    gauge_transform!(psi, q)
+    psi .= gauge_transform.(psi, q)
 end
 
 function Normalize!(psi)
-    broadcast!(psi, psi) do psi
+    map!(psi, psi) do psi
         a, b = abs(psi[1]), abs(psi[2])
         norm = inv(sqrt(a*a + b*b))
         (psi[1] * norm, psi[2] * norm)
@@ -154,6 +140,13 @@ function Normalize!(psi)
     psi
 end
 @inline twotuple(a, b) = (a, b)
+
+function poisson_solve(isf)
+    fc = fft(isf.f)
+    fc .= (*).(fc, isf.fac)
+    ifft!(fc)
+    fc
+end
 
 function schroedinger_flow!(isf, psi)
     # extract single psi values into tmp arrays stored in obj
@@ -252,6 +245,9 @@ function Base.append!(p::Particles, xyz)
     append!(p.active, range)
     return
 end
+
+
+
 
 
 end
