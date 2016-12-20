@@ -145,7 +145,7 @@ function GaugeTransform(psi1, psi2, q)
 end
 
 function PressureProject(obj, psi1, psi2)
-    vx,vy,vz = VelocityOneForm(obj, psi1,psi2)
+    vx,vy,vz = VelocityOneForm(obj, psi1, psi2)
     div = Div(obj, vx,vy,vz)
     q = -PoissonSolve(obj, div)
     x = GaugeTransform(psi1, psi2, q)
