@@ -1,7 +1,10 @@
 module BroadcastPort
 
-using GeometryTypes
 using StaticArrays
+const Vec = SVector
+const Point = SVector
+const Vec3f0 = Vec{3, Float32}
+const Point3f0 = Point{3, Float32}
 
 # lots of parameters. To lazy to write out types,
 # still don't want to waste performance
@@ -177,7 +180,7 @@ Base.length(p::Particles) = length(p.active)
 function staggered_advect!(particle, isf)
     velocity, dt, d, res = isf.velocity, isf.dt, isf.d, isf.grid_res
     gridsize = isf.physical_size
-    map!(particle) do p
+    map!(particle, particle) do p
 
         k1 = staggered_velocity(velocity, p, d, gridsize, res)
 
