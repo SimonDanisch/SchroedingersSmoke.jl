@@ -1,9 +1,17 @@
 module ParallelPort
 
-using GeometryTypes
 using StaticArrays
-#using GPUArrays
-const ArrayType = Array #GPUArrays.JLArray
+const Vec = SVector
+const Point = SVector
+const Vec3f0 = Vec{3, Float32}
+const Point3f0 = Point{3, Float32}
+
+using GPUArrays
+using GPUArrays.JLBackend
+using GPUArrays.JLBackend.JLArray
+import GPUArrays: mapidx
+
+const ArrayType = JLArray
 
 # lots of parameters. To lazy to write out types,
 # still don't want to waste performance
@@ -30,18 +38,18 @@ type ISF{IntType, FloatType}
     f::ArrayType{FloatType, 3}
 
     function ISF(physical_size, dims, hbar, dt)
-
+        JLBackend.init()
         VT = Vec{3, FloatType}
         grid_res = Vec(dims)
         physical_size = Vec(physical_size)
         d = VT(physical_size ./ grid_res)
-        fac = zeros(FloatType, dims)
+        fac = zeros(Complex{FloatType}, dims)
         mask = zeros(Complex{FloatType}, dims)
         f = -4 * pi^2 * hbar
         for x = 1:dims[1], y = 1:dims[2], z = 1:dims[3]
             xyz = Vec(x, y, z)
             # fac
-            s = sin(pi * (xyz - 1) ./ grid_res) ./ d
+            s = sin.(pi * (xyz - 1) ./ grid_res) ./ d
             denom = sum(s .^ 2)
             fac[x,y,z] = -0.25f0 ./ denom
 
@@ -167,8 +175,8 @@ end
 
 # simple statically allocated particle type
 type Particles{FloatType, IntType}
-    xyz::Vector{Point{3, FloatType}}
-    active::Vector{IntType}
+    xyz::ArrayType{Point{3, FloatType}, 1}
+    active::ArrayType{IntType, 1}
 end
 Base.length(p::Particles) = length(p.active)
 
