@@ -92,18 +92,19 @@ end
 # helper function to have a map but with random index manipulations
 
 @inline function velocity_one_form(i, i2, psi, hbar)
-    psi12  = psi[i[1],  i[2],  i[3]]
-    psix12 = psi[i2[1], i[2],  i[3]]
-    psiy12 = psi[i[1],  i2[2] ,i[3]]
-    psiz12 = psi[i[1],  i[2],  i2[3]]
-    psi1n  = Vec(psix12[1], psiy12[1], psiz12[1])
-    psi2n  = Vec(psix12[2], psiy12[2], psiz12[2])
-    angle.(
-        conj(psi12[1]) .* psi1n .+
-        conj(psi12[2]) .* psi2n
-    ) * hbar
+    @inbounds begin
+        psi12  = psi[i[1],  i[2],  i[3]]
+        psix12 = psi[i2[1], i[2],  i[3]]
+        psiy12 = psi[i[1],  i2[2] ,i[3]]
+        psiz12 = psi[i[1],  i[2],  i2[3]]
+        psi1n = Vec(psix12[1], psiy12[1], psiz12[1])
+        psi2n = Vec(psix12[2], psiy12[2], psiz12[2])
+        return angle.(
+            conj(psi12[1]) * psi1n .+
+            conj(psi12[2]) * psi2n
+        ) * hbar
+    end
 end
-
 function velocity_one_form!(isf, psi, hbar = 1.0f0)
     isf.velocity .= velocity_one_form.(
         isf.i,
