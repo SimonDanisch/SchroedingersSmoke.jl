@@ -144,42 +144,7 @@ function Base.showerror(io::IO, e::ResolveError)
     end
 end
 
-function resolve_dependencies!(dep::LazyMethod, visited = LazyMethod(Void), stack = [])
-    Sugar.isintrinsic(dep) && return visited.dependencies
-    if isa(dep.signature, Module)
-        delete!(visited.dependencies, dep)
-        return visited.dependencies
-    end
-    if dep in visited.dependencies
-        # when already in deps we need to move it up!
-        delete!(visited.dependencies, dep)
-        push!(visited.dependencies, dep)
-    else
-        push!(visited, dep)
-        try
-            push!(stack, dep.signature)
-            resolve_dependencies!(dependencies!(dep), visited)
 
-        catch e
-            for elem in stack
-                println("  ", elem)
-            end
-        finally
-            pop!(stack)
-        end
-    end
-    visited.dependencies
-end
-function resolve_dependencies!(deps, visited, stack = [])
-    for dep in copy(deps)
-        if !Sugar.isintrinsic(dep)
-            push!(stack, dep.signature)
-            resolve_dependencies!(dep, visited)
-            pop!(stack)
-        end
-    end
-    visited.dependencies
-end
 x = @lazymethod simloop(
    100, isf, psi, kvec, omega, n_particles,
    nozzle_rad, nozzle_cen, particle
