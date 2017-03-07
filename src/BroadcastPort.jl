@@ -84,21 +84,19 @@ function map_idx!{F, T}(f::F, A::AbstractArray, args::T)
     A
 end
 
-@inline function inner_velocity_one_form(i, velocity, idx_psi_hbar)
-    idx2, psi, hbar = idx_psi_hbar
-    i2 = (idx2[1][i[1]], idx2[2][i[2]], idx2[3][i[3]])
+@inline function velocity_one_form(i, i2, psi, hbar)
     @inbounds begin
         psi12  = psi[i[1],  i[2],  i[3]]
         psix12 = psi[i2[1], i[2],  i[3]]
         psiy12 = psi[i[1],  i2[2] ,i[3]]
         psiz12 = psi[i[1],  i[2],  i2[3]]
+        psi1n = Vec(psix12[1], psiy12[1], psiz12[1])
+        psi2n = Vec(psix12[2], psiy12[2], psiz12[2])
+        return angle.(
+            conj(psi12[1]) * psi1n .+
+            conj(psi12[2]) * psi2n
+        ) * hbar
     end
-    psi1n = Vec(psix12[1], psiy12[1], psiz12[1])
-    psi2n = Vec(psix12[2], psiy12[2], psiz12[2])
-    angle.(
-        conj(psi12[1]) .* psi1n .+
-        conj(psi12[2]) .* psi2n
-    ) * hbar
 end
 
 function velocity_one_form!(isf, psi, hbar = 1.0f0)
