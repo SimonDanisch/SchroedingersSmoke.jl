@@ -28,21 +28,22 @@ function isjet(p, nozzle_cen, nozzle_len, nozzle_rad)
     ((p[2] - nozzle_cen[2])^2 +
     (p[3] - nozzle_cen[3])^2 <= nozzle_rad .^ 2) != 0
 end
-function restrict_velocity(pos, psi, args)
-    omgterm, kvec, nozzle_cen, nozzle_len, nozzle_rad = args
+function restrict_inner(xyz, psi, args)
+    ranges, omgterm, kvec, nozzle_cen, nozzle_len, nozzle_rad = args
+    x, y, z = xyz
+    _psi = psi[x, y, z]
+    pos = getindex.(ranges, xyz)
     if isjet(pos, nozzle_cen, nozzle_len, nozzle_rad)
         phase = sum(kvec .* pos) - omgterm
-        (abs(psi[1]) * exp(1im * phase), abs(psi[2]) * exp(1im * phase))
+        return map(_psi) do p
+            abs(p) * exp(1im * phase)
+        end
     end
-    psi
+    _psi
 end
-function restrict_velocity!(isf, psi, kvec, nozzle_cen, nozzle_len, nozzle_rad, omgterm = 1f0)
-    args = (omgterm, kvec, nozzle_cen, nozzle_len, nozzle_rad)
-    psi .= restrict_velocity.(
-        isf.positions,
-        psi,
-        Scalar(args)
-    )
+function restrict_velocity!(psi, ranges, kvec, nozzle_cen, nozzle_len, nozzle_rad, omgterm = 1f0)
+    args = (ranges, omgterm, kvec, nozzle_cen, nozzle_len, nozzle_rad)
+    map_idx!(restrict_inner, psi, args)
 end
 
 

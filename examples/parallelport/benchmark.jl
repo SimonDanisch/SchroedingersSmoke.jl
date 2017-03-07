@@ -110,7 +110,7 @@ function simloop(
     end
 end
 
-b1 = @benchmark simloop(
-   1, $isf, $psi, $kvec, $omega, $n_particles,
-   $nozzle_rad, $nozzle_cen, $particle
+simloop(
+   200, isf, psi, kvec, omega, n_particles,
+   nozzle_rad, nozzle_cen, particle
 )
