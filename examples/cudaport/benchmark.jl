@@ -1,13 +1,13 @@
-Base.FFTW.set_num_threads(8)
-
+ENV["DEBUG"] = true
+ENV["TRACE"] = true
 using SchroedingersSmoke
-import SchroedingersSmoke.ParallelPort
+import SchroedingersSmoke.CUDAPort
 using StaticArrays, Colors
 
-import ParallelPort: ISF, normalize_psi, pressure_project!
-import ParallelPort: velocity_one_form!, schroedinger_flow!
-import ParallelPort: Particles, staggered_advect!, map_idx!
-import ParallelPort: Vec, Vec3f0, Point, Point3f0, JLArray
+import CUDAPort: ISF, normalize_psi, pressure_project!
+import CUDAPort: velocity_one_form!, schroedinger_flow!
+import CUDAPort: Particles, staggered_advect!, map_idx!
+import CUDAPort: Vec, Vec3f0, Point, Point3f0, CUArray
 using Sugar, BenchmarkTools
 import Sugar: @lazymethod, getsource!, dependencies!, getast!, isfunction, istype
 import Sugar: LazyMethod
@@ -23,7 +23,23 @@ nozzle_len = 0.5f0
 nozzle_rad = 0.5f0
 n_particles = 50   # number of particles
 
-isf = ISF{Int, Float32}(vol_size, dims, hbar, dt);
+isf = ISF{Int32, Float32}(vol_size, dims, hbar, dt);
+psi = GPUArrays.GPUArray([(one(Complex64), one(Complex64) * 0.01f0) for i=1:dims[1], j=1:dims[2], k=1:dims[3]]);
+velocity_one_form!(isf, psi)
+
+
+
+call = (GPUArrays.CUBackend.broadcast_kernel, (
+    CuDeviceArray{StaticArrays.SVector{3,Float32}, 3},
+    typeof(CUDAPort.velocity_one_form),
+    Tuple{UInt32,UInt32,UInt32},
+    Tuple{Val{true},Val{true},Val{false},Val{false}},
+    CuDeviceArray{Tuple{Int32,Int32,Int32},3},
+    CuDeviceArray{SVector{3,Int32}, 3},
+    CuDeviceArray{Tuple{Complex{Float32},Complex{Float32}}, 3},
+    Float32
+))
+
 
 # function returning true at nozzle position
 function isjet(p, nozzle_cen, nozzle_len, nozzle_rad)
@@ -49,7 +65,7 @@ function restrict_velocity!(isf, psi, kvec, nozzle_cen, nozzle_len, nozzle_rad, 
 end
 
 # initialize psi
-psi = JLArray([(one(Complex64), one(Complex64) * 0.01f0) for i=1:dims[1], j=1:dims[2], k=1:dims[3]]);
+psi = CUArray([(one(Complex64), one(Complex64) * 0.01f0) for i=1:dims[1], j=1:dims[2], k=1:dims[3]]);
 normalize_psi.(psi);
 
 kvec = jet_velocity ./ hbar;
@@ -110,9 +126,7 @@ function simloop(
     end
 end
 
-
-simloop(
-   200, isf, psi, kvec, omega, n_particles,
-   nozzle_rad, nozzle_cen, particle
+b1 = @benchmark simloop(
+   1, $isf, $psi, $kvec, $omega, $n_particles,
+   $nozzle_rad, $nozzle_cen, $particle
 )
-isf.velocity
