@@ -114,3 +114,4 @@ simloop(
    200, isf, psi, kvec, omega, n_particles,
    nozzle_rad, nozzle_cen, particle
 )
+isf.velocity

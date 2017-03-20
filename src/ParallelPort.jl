@@ -248,15 +248,14 @@ function Base.append!(p::Particles, xyz)
         if !(i in p.active)
             inserted += 1
             p.xyz[i] = xyz[inserted]
-            push!(p.active, i)
+            push!(p.active.buffer, i)
         end
         inserted == length(xyz) && return
     end
-    sort!(p.active)
+    sort!(p.active.buffer)
     length(xyz) == inserted && return
     # We have more particles than `gaps`, meaning all gaps should be filled
     # and length(p.active) == last(p.active)
-    @show inserted length(xyz)
     @assert isempty(p.active) || (length(p.active) == last(p.active)) # lets just make sure of this
     rest = length(xyz) - inserted
     newlen = length(p.active) + rest
@@ -266,8 +265,8 @@ function Base.append!(p::Particles, xyz)
         newlen = length(p.xyz)
     end
     range = (length(p.active)+1):newlen
-    p.xyz[range] = view(xyz, (inserted+1):length(xyz))
-    append!(p.active, range)
+    p.xyz.buffer[range] = view(xyz.buffer, (inserted+1):length(xyz))
+    append!(p.active.buffer, range)
     return
 end
 

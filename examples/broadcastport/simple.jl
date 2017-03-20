@@ -4,7 +4,7 @@ BLAS.set_num_threads(8)
 using SchroedingersSmoke
 import SchroedingersSmoke.BroadcastPort
 
-using GeometryTypes, GLAbstraction, GLVisualize, StaticArrays, Colors
+using GeometryTypes, GLAbstraction, GLVisualize, Colors
 
 import BroadcastPort: ISF, Normalize!, pressure_project!, Particles, staggered_advect!
 import BroadcastPort: velocity_one_form!, schroedinger_flow!, map_idx!
