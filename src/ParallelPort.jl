@@ -10,7 +10,7 @@ const ArrayType = Array
 
 # lots of parameters. To lazy to write out types,
 # still don't want to waste performance
-type ISF{IntType, FloatType}
+type ISF{IntType, FloatType, FFTP, IFFTP}
 
     grid_res::Vec{3, IntType}
     physical_size::Vec{3, IntType}
@@ -31,56 +31,67 @@ type ISF{IntType, FloatType}
     fac::ArrayType{Complex{FloatType}, 3}
     # temporary allocations for intermediates
     f::ArrayType{FloatType, 3}
+    fc::ArrayType{Complex{FloatType}, 3}
+    psi1::ArrayType{Complex{FloatType}, 3}
+    psi2::ArrayType{Complex{FloatType}, 3}
+    fftplan::FFTP
+    ifftplan::IFFTP
+end
 
-    function ISF(physical_size, dims, hbar, dt)
-        VT = Vec{3, FloatType}
-        grid_res = Vec(dims)
-        physical_size = Vec(physical_size)
-        d = VT(physical_size ./ grid_res)
-        fac = zeros(Complex{FloatType}, dims)
-        mask = zeros(Complex{FloatType}, dims)
-        f = -4 * pi^2 * hbar
-        for x = 1:dims[1], y = 1:dims[2], z = 1:dims[3]
-            xyz = Vec(x, y, z)
-            # fac
-            s = sin.(pi * (xyz - 1) ./ grid_res) ./ d
-            denom = sum(s .^ 2)
-            fac[x,y,z] = -0.25f0 ./ denom
+function (::Type{ISF{IntType, FloatType}})(physical_size, dims, hbar, dt) where {IntType, FloatType}
+    VT = Vec{3, FloatType}
+    grid_res = Vec(dims)
+    physical_size = Vec(physical_size)
+    d = VT(physical_size ./ grid_res)
+    fac = zeros(Complex{FloatType}, dims)
+    mask = zeros(Complex{FloatType}, dims)
+    f = -4 * pi^2 * hbar
+    for x = 1:dims[1], y = 1:dims[2], z = 1:dims[3]
+        xyz = Vec(x, y, z)
+        # fac
+        s = sin.(pi * (xyz - 1) ./ grid_res) ./ d
+        denom = sum(s .^ 2)
+        fac[x,y,z] = -0.25f0 ./ denom
 
-            # schroedingers mask
-            k = (xyz - 1 - grid_res ./ 2) ./ physical_size
-            lambda = f * sum(k .^ 2)
-            mask[x,y,z] = exp(1.0im * lambda * dt / 2)
-        end
-        fac[1,1,1] = 0
-
-        f = zeros(FloatType, dims)
-        velocity = zeros(VT, dims)
-
-        i = collect(((x, y, z) for x=1:dims[1], y=1:dims[2], z=1:dims[3]))
-        i_shifted = map(i) do i
-            mod.(Vec(i), Vec(dims)) .+ 1
-        end
-        i_shifted2 = map(i) do i
-             mod.(Vec(i) - 2, Vec(dims)) + 1
-        end
-        positions = map(i) do i
-            Point{3, FloatType}((Vec(i) .- 1) .* d)
-        end
-        new(
-            grid_res,
-            physical_size,
-            d,
-            velocity,
-            hbar,
-            dt,
-            mask,
-            i, i_shifted, i_shifted2,
-            positions,
-            fac,
-            f
-        )
+        # schroedingers mask
+        k = (xyz - 1 - grid_res ./ 2) ./ physical_size
+        lambda = f * sum(k .^ 2)
+        mask[x,y,z] = exp(1.0im * lambda * dt / 2)
     end
+    mask = fftshift(mask)
+    fac[1,1,1] = 0
+
+    f = zeros(FloatType, dims)
+    velocity = zeros(VT, dims)
+
+    i = collect(((x, y, z) for x=1:dims[1], y=1:dims[2], z=1:dims[3]))
+    i_shifted = map(i) do i
+        mod.(Vec(i), Vec(dims)) .+ 1
+    end
+    i_shifted2 = map(i) do i
+         mod.(Vec(i) - 2, Vec(dims)) + 1
+    end
+    positions = map(i) do i
+        Point{3, FloatType}((Vec(i) .- 1) .* d)
+    end
+    p1, p2 = plan_fft!(fac), plan_ifft!(fac)
+    ISF{IntType, FloatType, typeof(p1), typeof(p2)}(
+        grid_res,
+        physical_size,
+        d,
+        velocity,
+        hbar,
+        dt,
+        mask,
+        i, i_shifted, i_shifted2,
+        positions,
+        fac,
+        f,
+        complex.(f),
+        complex.(f),
+        complex.(f),
+        p1, p2
+    )
 end
 
 # helper function to have a map but with random index manipulations
@@ -150,20 +161,22 @@ end
 @inline twotuple(a, b) = (a, b)
 
 function poisson_solve(isf)
-    fc = fft(isf.f)
-    fc .= (*).(fc, isf.fac)
-    ifft!(fc)
-    fc
+    isf.fc .= complex.(isf.f)
+    isf.fftplan * isf.fc
+    isf.fc .= (*).(isf.fc, isf.fac)
+    isf.ifftplan * isf.fc
+    isf.fc
 end
 
 function schroedinger_flow!(isf, psi)
     # extract single psi values into tmp arrays stored in obj
-    psi1 = map(first, psi)
-    psi2 = map(last, psi)
-    psi1 = fftshift(fft(psi1)); psi2 = fftshift(fft(psi2));
+    psi1 = isf.psi1; psi2 = isf.psi2
+    psi1 .= first.(psi)
+    psi2 .= last.(psi)
+    isf.fftplan * psi1; isf.fftplan * psi2;
     psi1 .= (*).(psi1, isf.mask)
     psi2 .= (*).(psi2, isf.mask)
-    psi1 = ifft!(fftshift(psi1)); psi2 = ifft!(fftshift(psi2));
+    isf.ifftplan * psi1; isf.ifftplan * psi2;
     psi .= twotuple.(psi1, psi2) # convert back
     psi
 end

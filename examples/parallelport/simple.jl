@@ -19,7 +19,7 @@ jet_velocity = Vec3f0(1, 0, 0)
 nozzle_cen = Vec3f0(2-1.7, 1-0.034, 1+0.066)
 nozzle_len = 0.5f0
 nozzle_rad = 0.5f0
-n_particles = 50   # number of particles
+n_particles = 200   # number of particles
 
 isf2 = ISF{Int, Float32}(vol_size, dims, hbar, dt);
 
@@ -57,7 +57,7 @@ for iter = 1:10
     pressure_project!(isf2, psi)
 end
 
-psi2 ≈ last.(psi)
+# psi2 ≈ last.(psi)#
 
 ## SET PARTICLES
 # particle = Particles{Float32, Int}(
