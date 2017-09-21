@@ -32,8 +32,8 @@ isf = MatlabPort.ISF(vol_size, vol_res, hbar, dt)
 
 # Set nozzle
 isJet = land(
-    abs(isf.px - nozzle_cen[1]) .<= nozzle_len/2,
-    (isf.py - nozzle_cen[2]).^2+(isf.pz - nozzle_cen[3]).^2 .<= nozzle_rad.^2
+    abs.(isf.px .- nozzle_cen[1]) .<= nozzle_len./2,
+    (isf.py .- nozzle_cen[2]) .^ 2 .+ (isf.pz .- nozzle_cen[3]) .^ 2 .<= nozzle_rad .^ 2
 )
 
 # initialize psi
@@ -43,16 +43,16 @@ psi1f, psi2f = Normalize(psi1f, psi2f)
 
 # constrain velocity
 kvec = jet_velocity / isf.hbar
-omega = sum(jet_velocity .^ 2) / (2*isf.hbar);
-phase = kvec[1].*isf.px + kvec[2].*isf.py + kvec[3].*isf.pz;
+omega = sum(jet_velocity .^ 2) ./ (2*isf.hbar);
+phase = kvec[1].*isf.px .+ kvec[2].*isf.py .+ kvec[3].*isf.pz;
 # convert to complex
-psi1 = (1.+0.0im)*psi1f
-psi2 = (1.+0.0im)*psi2f
+psi1 = (1.+0.0im) .* psi1f
+psi2 = (1.+0.0im) .* psi2f
 for iter = 1:10
-    amp1 = abs(psi1)
-    amp2 = abs(psi2)
-    psi1[isJet] = amp1[isJet] .* exp(1.0im*phase[isJet])
-    psi2[isJet] = amp2[isJet] .* exp(1.0im*phase[isJet])
+    amp1 = abs.(psi1)
+    amp2 = abs.(psi2)
+    psi1[isJet] = amp1[isJet] .* exp.(1.0im*phase[isJet])
+    psi2[isJet] = amp2[isJet] .* exp.(1.0im*phase[isJet])
     psi1, psi2 = PressureProject(isf, psi1, psi2)
 end
 max_particles = 20_000
@@ -77,13 +77,14 @@ particle = Particles(
 )
 
 
-using GLVisualize; w = glscreen(); @async GLWindow.waiting_renderloop(w)
+using GLVisualize; w = glscreen(); @async GLWindow.renderloop(w)
+
 particle_vis = visualize(
-    (Circle(Point3f0(0), 0.006f0), (particle.x, particle.y, particle.z)),
+    (Circle(Point2f0(0), 0.006f0), (particle.x, particle.y, particle.z)),
     boundingbox = nothing, # don't waste time on bb computation
     billboard = true, indices = particle.active
 ).children[]
-_view(particle_vis)
+_view(particle_vis, camera = :perspective)
 
 
 function loop(
@@ -101,18 +102,18 @@ function loop(
         psi1, psi2 = PressureProject(isf, psi1, psi2)
 
         # constrain velocity
-        phase = kvec[1].*isf.px + kvec[2].*isf.py + kvec[3].*isf.pz - omega*t
-        amp1 = abs(psi1)
-        amp2 = abs(psi2)
-        psi1[isJet] = amp1[isJet].*exp(1.0im*phase[isJet])
-        psi2[isJet] = amp2[isJet].*exp(1.0im*phase[isJet])
+        phase = kvec[1] .* isf.px .+ kvec[2] .* isf.py .+ kvec[3] .* isf.pz .- omega .* t
+        amp1 = abs.(psi1)
+        amp2 = abs.(psi2)
+        psi1[isJet] = amp1[isJet] .* exp.(1.0im*phase[isJet])
+        psi2[isJet] = amp2[isJet] .* exp.(1.0im*phase[isJet])
         psi1, psi2  = PressureProject(isf, psi1, psi2)
 
         # particle birth
         rt   = rand(Float32, n_particles)*2*pi
-        newx = nozzle_cen[1] * ones(Float32, size(rt))
-        newy = nozzle_cen[2] + 0.9*nozzle_rad*cos(rt)
-        newz = nozzle_cen[3] + 0.9*nozzle_rad*sin(rt)
+        newx = nozzle_cen[1] .* ones(Float32, size(rt))
+        newy = nozzle_cen[2] .+ 0.9 .* nozzle_rad .* cos.(rt)
+        newz = nozzle_cen[3] .+ 0.9 .* nozzle_rad .* sin.(rt)
         append!(particle, newx, newy, newz)
         removethedead!(particle, vol_size)
         # advect and show particles

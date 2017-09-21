@@ -101,7 +101,7 @@ end
 
 function velocity_one_form!(isf, psi, hbar = 1.0f0)
     arg = (isf.idx_shifted, psi, hbar)
-    map_idx!(inner_velocity_one_form, isf.velocity, arg)
+    map_idx!(velocity_one_form, isf.velocity, arg)
 end
 
 

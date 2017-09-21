@@ -6,12 +6,7 @@ const Point = SVector
 const Vec3f0 = Vec{3, Float32}
 const Point3f0 = Point{3, Float32}
 
-using GPUArrays
-using GPUArrays.JLBackend
-using GPUArrays.JLBackend.JLArray
-import GPUArrays: mapidx
-
-const ArrayType = JLArray
+const ArrayType = Array
 
 # lots of parameters. To lazy to write out types,
 # still don't want to waste performance
@@ -38,7 +33,6 @@ type ISF{IntType, FloatType}
     f::ArrayType{FloatType, 3}
 
     function ISF(physical_size, dims, hbar, dt)
-        JLBackend.init()
         VT = Vec{3, FloatType}
         grid_res = Vec(dims)
         physical_size = Vec(physical_size)
@@ -248,11 +242,11 @@ function Base.append!(p::Particles, xyz)
         if !(i in p.active)
             inserted += 1
             p.xyz[i] = xyz[inserted]
-            push!(p.active.buffer, i)
+            push!(p.active, i)
         end
         inserted == length(xyz) && return
     end
-    sort!(p.active.buffer)
+    sort!(p.active)
     length(xyz) == inserted && return
     # We have more particles than `gaps`, meaning all gaps should be filled
     # and length(p.active) == last(p.active)
@@ -265,19 +259,11 @@ function Base.append!(p::Particles, xyz)
         newlen = length(p.xyz)
     end
     range = (length(p.active)+1):newlen
-    p.xyz.buffer[range] = view(xyz.buffer, (inserted+1):length(xyz))
-    append!(p.active.buffer, range)
+    p.xyz[range] = view(xyz, (inserted+1):length(xyz))
+    append!(p.active, range)
     return
 end
 
-# import BroadcastPort: velocity_one_form!
-# import BroadcastPort: gauge_transform!
-# import BroadcastPort: poisson_solve!
-# import BroadcastPort: pressure_project!
-# import BroadcastPort: Normalize!
-# import BroadcastPort: schroedinger_flow!
-# import BroadcastPort: Particles!
-# import BroadcastPort: staggered_advect!
 
 
 end

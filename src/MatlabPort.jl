@@ -23,7 +23,7 @@ end
 function ndgrid{T}(vs::AbstractVector{T}...)
     n = length(vs)
     sz = map(length, vs)
-    out = ntuple(i->Array(T, sz), n)
+    out = ntuple(i->Array{T}(sz), n)
     s = 1
     for i=1:n
         a = out[i]::Array
@@ -75,11 +75,11 @@ end
 function BuildSchroedinger(obj::ISF)
     nx=obj.resx; ny=obj.resy; nz=obj.resz;
     fac = -4*pi^2*obj.hbar;
-    kx = (obj.iix-1-nx/2) / (obj.sizex);
-    ky = (obj.iiy-1-ny/2) / (obj.sizey);
-    kz = (obj.iiz-1-nz/2) / (obj.sizez);
-    lambda = fac*(kx.^2+ky.^2+kz.^2);
-    obj.mask = exp(1.0im*lambda*obj.dt/2.);
+    kx = (obj.iix .- 1 .- nx ./ 2) ./ (obj.sizex);
+    ky = (obj.iiy .- 1 .- ny ./ 2) ./ (obj.sizey);
+    kz = (obj.iiz .- 1 .- nz ./ 2) ./ (obj.sizez);
+    lambda = fac .* (kx .^ 2 .+ ky .^ 2 .+ kz .^ 2);
+    obj.mask = exp.(1.0im*lambda*obj.dt/2.);
 end
 """
 solves Schroedinger equation for dt time.
@@ -104,20 +104,20 @@ function StaggeredSharp(obj,vx,vy,vz)
 end
 
 function VelocityOneForm(obj, psi1, psi2, hbar=1.0)
-    ixp = mod(obj.ix, obj.resx) + 1;
-    iyp = mod(obj.iy, obj.resy) + 1;
-    izp = mod(obj.iz, obj.resz) + 1;
-    vx = angle(
-        conj(psi1).*view(psi1, ixp,:,:) +
-        conj(psi2).*view(psi2, ixp,:,:)
+    ixp = mod.(obj.ix, obj.resx) + 1;
+    iyp = mod.(obj.iy, obj.resy) + 1;
+    izp = mod.(obj.iz, obj.resz) + 1;
+    vx = angle.(
+        conj.(psi1).*view(psi1, ixp,:,:) .+
+        conj.(psi2).*view(psi2, ixp,:,:)
     );
-    vy = angle(
-        conj(psi1).*view(psi1,:,iyp,:) +
-        conj(psi2).*view(psi2,:,iyp,:)
+    vy = angle.(
+        conj.(psi1).*view(psi1,:,iyp,:) .+
+        conj.(psi2).*view(psi2,:,iyp,:)
     )
-    vz = angle(
-        conj(psi1).*view(psi1,:,:,izp) +
-        conj(psi2).*view(psi2,:,:,izp)
+    vz = angle.(
+        conj.(psi1).*view(psi1,:,:,izp) .+
+        conj.(psi2).*view(psi2,:,:,izp)
     )
     vx = vx*hbar;
     vy = vy*hbar;
@@ -127,9 +127,9 @@ end
 
 function PoissonSolve(obj, f)
     f = fft(f)
-    sx = sin(pi*(obj.iix-1)/obj.resx)/obj.dx
-    sy = sin(pi*(obj.iiy-1)/obj.resy)/obj.dy
-    sz = sin(pi*(obj.iiz-1)/obj.resz)/obj.dz
+    sx = sin.(pi .* (obj.iix .- 1) ./ obj.resx) ./ obj.dx
+    sy = sin.(pi .* (obj.iiy .- 1) ./ obj.resy) ./ obj.dy
+    sz = sin.(pi .* (obj.iiz .- 1) ./ obj.resz) ./ obj.dz
     denom = sx.^2 + sy.^2 + sz.^2
     fac = -0.25./denom
     fac[1,1,1] = 0.0
@@ -138,7 +138,7 @@ function PoissonSolve(obj, f)
 end
 
 function GaugeTransform(psi1, psi2, q)
-    eiq = exp(1.0im * q);
+    eiq = exp.(1.0im .* q);
     psi1 = psi1 .* eiq
     psi2 = psi2 .* eiq
     psi1, psi2
@@ -153,19 +153,19 @@ function PressureProject(obj, psi1, psi2)
 end
 
 function Normalize(psi1, psi2)
-    psi_norm = sqrt(abs(psi1).^2 + abs(psi2).^2);
+    psi_norm = sqrt.(abs.(psi1) .^ 2 .+ abs.(psi2) .^ 2)
     psi1 = psi1 ./ psi_norm
     psi2 = psi2 ./ psi_norm
     psi1, psi2
 end
 
 function Div(obj, vx, vy, vz)
-    ixm = mod(obj.ix-2, obj.resx) + 1
-    iym = mod(obj.iy-2, obj.resy) + 1
-    izm = mod(obj.iz-2, obj.resz) + 1
-    f =     (vx - view(vx, ixm,:,:))/(obj.dx^2)
-    f = f + (vy - view(vy, :,iym,:))/(obj.dy^2)
-    f = f + (vz - view(vz, :,:,izm))/(obj.dz^2)
+    ixm = mod.(obj.ix-2, obj.resx) .+ 1
+    iym = mod.(obj.iy-2, obj.resy) .+ 1
+    izm = mod.(obj.iz-2, obj.resz) .+ 1
+    f =     (vx .- view(vx, ixm,:,:)) ./ (obj.dx .^ 2)
+    f = f .+ (vy .- view(vy, :,iym,:)) ./ (obj.dy .^ 2)
+    f = f .+ (vz .- view(vz, :,:,izm)) ./ (obj.dz .^ 2)
     f
 end
 
@@ -205,20 +205,20 @@ function StaggeredAdvect(p, torus, vx, vy, vz, dt)
         torus,vx,vy,vz
     )
     k2x,k2y,k2z = StaggeredVelocity(
-        px+k1x*dt/2,py+k1y*dt/2,pz+k1z*dt/2,
+        px .+ k1x .* dt ./ 2,py .+ k1y .* dt/2,pz .+ k1z .* dt ./ 2,
         torus,vx,vy,vz
     )
     k3x,k3y,k3z = StaggeredVelocity(
-        px+k2x*dt/2,py+k2y*dt/2,pz+k2z*dt/2,
-        torus,vx,vy,vz
+        px .+ k2x .* dt ./ 2, py .+ k2y .* dt ./ 2, pz .+ k2z .* dt ./2,
+        torus, vx, vy, vz
     )
     k4x,k4y,k4z = StaggeredVelocity(
-        px+k3x*dt,py+k3y*dt,pz+k3z*dt,
+        px .+ k3x .* dt,py .+ k3y .* dt,pz .+ k3z .* dt,
         torus,vx,vy,vz
     )
-    p.x[p.active] = px + dt/6*(k1x+2*k2x+2*k3x+k4x)
-    p.y[p.active] = py + dt/6*(k1y+2*k2y+2*k3y+k4y)
-    p.z[p.active] = pz + dt/6*(k1z+2*k2z+2*k3z+k4z)
+    p.x[p.active] .= px .+ dt ./ 6 .* (k1x .+ 2 .* k2x .+ 2 .* k3x .+ k4x)
+    p.y[p.active] .= py .+ dt ./ 6 .* (k1y .+ 2 .* k2y .+ 2 .* k3y .+ k4y)
+    p.z[p.active] .= pz .+ dt ./ 6 .* (k1z .+ 2 .* k2z .+ 2 .* k3z .+ k4z)
 end
 """
 for removing particles
@@ -229,51 +229,46 @@ function Keep(particle, ind)
     particle.z = particle.z[ind]
 end
 
-"""
-Base doesn't have a vectorized form of sub2ind, so we add it!
-"""
-function Base.sub2ind{N, T<:Integer}(res::NTuple{N, Int}, A::AbstractArray{T, N}...)
-    Int[sub2ind(res, i...) for i in zip(A...)]
-end
 
 """
  evaluates velocity at (px,py,pz) in the grid torus with staggered
  velocity vector field vx,vy,vz
 """
 function StaggeredVelocity(pxf,pyf,pzf,torus,vx,vy,vz)
-    px = mod(pxf, torus.sizex)
-    py = mod(pyf, torus.sizey)
-    pz = mod(pzf, torus.sizez)
+    px = mod.(pxf, torus.sizex)
+    py = mod.(pyf, torus.sizey)
+    pz = mod.(pzf, torus.sizez)
 
-    ix = floor(Int, px/torus.dx) + 1
-    iy = floor(Int, py/torus.dy) + 1
-    iz = floor(Int, pz/torus.dz) + 1
-    ixp = mod(ix,torus.resx)+1
-    iyp = mod(iy,torus.resy)+1
-    izp = mod(iz,torus.resz)+1
+    ix = floor.(Int, px/torus.dx) .+ 1
+    iy = floor.(Int, py/torus.dy) .+ 1
+    iz = floor.(Int, pz/torus.dz) .+ 1
+    ixp = mod.(ix,torus.resx) .+ 1
+    iyp = mod.(iy,torus.resy) .+ 1
+    izp = mod.(iz,torus.resz) .+ 1
 
-    res = (torus.resx,torus.resy,torus.resz)
+    res = Base.RefValue((torus.resx,torus.resy,torus.resz))
 
-    ind0 = sub2ind(res, ix,iy,iz)
-    indxp = sub2ind(res, ixp,iy,iz)
-    indyp = sub2ind(res, ix,iyp,iz)
-    indzp = sub2ind(res, ix,iy,izp)
-    indxpyp = sub2ind(res, ixp,iyp,iz)
-    indypzp = sub2ind(res, ix,iyp,izp)
-    indxpzp = sub2ind(res, ixp,iy,izp)
+    ind0 = sub2ind.(res, ix, iy, iz)
+    indxp = sub2ind.(res, ixp, iy, iz)
+    indyp = sub2ind.(res, ix, iyp, iz)
+    indzp = sub2ind.(res, ix, iy, izp)
+    indxpyp = sub2ind.(res, ixp, iyp, iz)
+    indypzp = sub2ind.(res, ix, iyp, izp)
+    indxpzp = sub2ind.(res, ixp, iy, izp)
 
-    wx = px - (ix-1)*torus.dx
-    wy = py - (iy-1)*torus.dy
-    wz = pz - (iz-1)*torus.dz
+    wx = px .- (ix .- 1) .* torus.dx
+    wy = py .- (iy .- 1) .* torus.dy
+    wz = pz .- (iz .- 1) .* torus.dz
 
-    ux = ((1-wz).*((1-wy).*vx[ind0 ]+wy.*vx[indyp  ]) +
+    ux = ((1-wz).*((1-wy).*vx[ind0 ]+wy.*vx[indyp  ]) .+
             wz .*((1-wy).*vx[indzp]+wy.*vx[indypzp]))
 
-    uy = ((1-wz).*((1-wx).*vy[ind0 ]+wx.*vy[indxp  ]) +
+    uy = ((1-wz).*((1-wx).*vy[ind0 ]+wx.*vy[indxp  ]) .+
             wz .*((1-wx).*vy[indzp]+wx.*vy[indxpzp]))
 
-    uz = ((1-wy).*((1-wx).*vz[ind0 ]+wx.*vz[indxp  ]) +
+    uz = ((1-wy).*((1-wx).*vz[ind0 ]+wx.*vz[indxp  ]) .+
             wy .*((1-wx).*vz[indyp]+wx.*vz[indxpyp]))
+
     ux,uy,uz
 end
 

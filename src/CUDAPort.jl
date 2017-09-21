@@ -5,13 +5,11 @@ const Vec = SVector
 const Point = SVector
 const Vec3f0 = Vec{3, Float32}
 const Point3f0 = Point{3, Float32}
-
 using GPUArrays
-using GPUArrays.CUBackend
-using GPUArrays.CUBackend.CUArray
-import GPUArrays: mapidx
+using GPUArrays: mapidx
+using Base: RefValue
 
-const ArrayType = CUArray
+const ArrayType = CUBackend.CUArray
 
 # lots of parameters. To lazy to write out types,
 # still don't want to waste performance
@@ -87,20 +85,6 @@ type ISF{IntType, FloatType}
             fac,
             f
         )
-    end
-end
-@inline function test(i, i2, psi, hbar)
-    @inbounds begin
-        psi12  = psi[i[1],  i[2],  i[3]]
-        psix12 = psi[i2[1], i[2],  i[3]]
-        psiy12 = psi[i[1],  i2[2] ,i[3]]
-        psiz12 = psi[i[1],  i[2],  i2[3]]
-        psi1n  = Vec(psix12[1], psiy12[1], psiz12[1])
-        psi2n  = Vec(psix12[2], psiy12[2], psiz12[2])
-        return angle.(
-            conj(psi12[1]) * psi1n .+
-            conj(psi12[2]) * psi2n
-        ) * hbar
     end
 end
 
