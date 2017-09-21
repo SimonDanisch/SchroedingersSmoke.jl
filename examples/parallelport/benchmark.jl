@@ -8,9 +8,8 @@ import ParallelPort: ISF, normalize_psi, pressure_project!
 import ParallelPort: velocity_one_form!, schroedinger_flow!
 import ParallelPort: Particles, staggered_advect!, map_idx!
 import ParallelPort: Vec, Vec3f0, Point, Point3f0, JLArray
-using Sugar, BenchmarkTools
-import Sugar: @lazymethod, getsource!, dependencies!, getast!, isfunction, istype
-import Sugar: LazyMethod
+using BenchmarkTools
+
 
 vol_size = (4,2,2)# box size
 dims = (64,32,32) # volume resolution
@@ -49,7 +48,7 @@ function restrict_velocity!(isf, psi, kvec, nozzle_cen, nozzle_len, nozzle_rad, 
 end
 
 # initialize psi
-psi = JLArray([(one(Complex64), one(Complex64) * 0.01f0) for i=1:dims[1], j=1:dims[2], k=1:dims[3]]);
+psi = ([(one(Complex64), one(Complex64) * 0.01f0) for i=1:dims[1], j=1:dims[2], k=1:dims[3]]);
 normalize_psi.(psi);
 
 kvec = jet_velocity ./ hbar;
@@ -115,4 +114,3 @@ simloop(
    200, isf, psi, kvec, omega, n_particles,
    nozzle_rad, nozzle_cen, particle
 )
-isf.velocity
