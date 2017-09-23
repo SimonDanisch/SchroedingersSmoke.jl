@@ -19,7 +19,7 @@ jet_velocity = Vec3f0(1, 0, 0)
 nozzle_cen = Vec3f0(2-1.7, 1-0.034, 1+0.066)
 nozzle_len = 0.5f0
 nozzle_rad = 0.5f0
-n_particles = 200   # number of particles
+n_particles = 300   # number of particles
 
 isf2 = ISF{Int, Float32}(vol_size, dims, hbar, dt);
 
@@ -44,7 +44,7 @@ function restrict_velocity!(isf, psi, kvec, isjetarr, omgterm = 0f0)
 end
 
 # initialize psi
-psi = ([(one(Complex64), one(Complex64) * 0.01f0) for i=1:dims[1], j=1:dims[2], k=1:dims[3]]);
+psi = CLArray([(one(Complex64), one(Complex64) * 0.01f0) for i=1:dims[1], j=1:dims[2], k=1:dims[3]]);
 
 psi .= normalize_psi.(psi);
 
@@ -86,7 +86,7 @@ append!(particle, newp);
 using GLVisualize; w = glscreen(); @async renderloop(w)
 
 particle_vis = visualize(
-    (GeometryTypes.Circle(GeometryTypes.Point2f0(0), 0.005f0), GeometryTypes.Point3f0.(particle.xyz)),
+    (GeometryTypes.Circle(GeometryTypes.Point2f0(0), 0.006f0), GeometryTypes.Point3f0.(particle.xyz)),
     boundingbox = nothing, # don't waste time on bb computation
     color = RGBA{Float32}(0,0,0,0.4),
     billboard = true, indices = particle.active
@@ -111,11 +111,12 @@ function simloop(
 
         newp = map(1:n_particles) do _
             rt = rand()*2*pi
+            offset = (rand(Point3f0) .* 0.01f0) - 0.005f0
             Point3f0(
                 nozzle_cen[1] - 0.1,
                 nozzle_cen[2] + 0.9 * nozzle_rad * cos(rt),
                 nozzle_cen[3] + 0.9 * nozzle_rad * sin(rt)
-            )
+            ) .+ offset
         end
         append!(particle, newp)
         filter!(in_grid, particle.active)

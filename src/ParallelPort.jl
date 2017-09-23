@@ -1,12 +1,12 @@
 module ParallelPort
 
-using StaticArrays
-const Vec = SVector
-const Point = SVector
-const Vec3f0 = Vec{3, Float32}
-const Point3f0 = Point{3, Float32}
+using StaticArrays, CLArrays
+const Vec{N, T} = NTuple{N, T}
+const Point{N, T} = NTuple{N, T}
+const Vec3f0 = NTuple{3, Float32}
+const Point3f0 = NTuple{3, Float32}
 
-const ArrayType = Array
+const ArrayType = CLArray
 
 # lots of parameters. To lazy to write out types,
 # still don't want to waste performance
@@ -38,8 +38,12 @@ type ISF{IntType, FloatType, FFTP, IFFTP}
     ifftplan::IFFTP
 end
 
+function Base.zero(::Type{NTuple{N, T}}) where {T, N}
+    ntuple(x-> zero(T), Val{N})
+end
+
 function (::Type{ISF{IntType, FloatType}})(physical_size, dims, hbar, dt) where {IntType, FloatType}
-    VT = Vec{3, FloatType}
+    VT = NTuple{3, FloatType}
     grid_res = Vec(dims)
     physical_size = Vec(physical_size)
     d = VT(physical_size ./ grid_res)
@@ -47,15 +51,15 @@ function (::Type{ISF{IntType, FloatType}})(physical_size, dims, hbar, dt) where 
     mask = zeros(Complex{FloatType}, dims)
     f = -4 * pi^2 * hbar
     for x = 1:dims[1], y = 1:dims[2], z = 1:dims[3]
-        xyz = Vec(x, y, z)
+        xyz = (x, y, z)
         # fac
-        s = sin.(pi * (xyz - 1) ./ grid_res) ./ d
+        s = sin.(pi .* (xyz .- 1) ./ grid_res) ./ d
         denom = sum(s .^ 2)
         fac[x,y,z] = -0.25f0 ./ denom
 
         # schroedingers mask
-        k = (xyz - 1 - grid_res ./ 2) ./ physical_size
-        lambda = f * sum(k .^ 2)
+        k = (xyz .- 1 .- grid_res ./ 2) ./ physical_size
+        lambda = f .* sum(k .^ 2)
         mask[x,y,z] = exp(1.0im * lambda * dt / 2)
     end
     mask = fftshift(mask)
@@ -69,12 +73,13 @@ function (::Type{ISF{IntType, FloatType}})(physical_size, dims, hbar, dt) where 
         mod.(Vec(i), Vec(dims)) .+ 1
     end
     i_shifted2 = map(i) do i
-         mod.(Vec(i) - 2, Vec(dims)) + 1
+         mod.(i .- 2, dims) .+ 1
     end
     positions = map(i) do i
-        Point{3, FloatType}((Vec(i) .- 1) .* d)
+        (i .- 1) .* d
     end
-    p1, p2 = plan_fft!(fac), plan_ifft!(fac)
+    fac_gpu = ArrayType(fac)
+    p1, p2 = plan_fft!(fac_gpu), plan_ifft!(fac_gpu)
     ISF{IntType, FloatType, typeof(p1), typeof(p2)}(
         grid_res,
         physical_size,
@@ -102,47 +107,51 @@ end
         psix12 = psi[i2[1], i[2],  i[3]]
         psiy12 = psi[i[1],  i2[2] ,i[3]]
         psiz12 = psi[i[1],  i[2],  i2[3]]
-        psi1n = Vec(psix12[1], psiy12[1], psiz12[1])
-        psi2n = Vec(psix12[2], psiy12[2], psiz12[2])
+        psi1n = (psix12[1], psiy12[1], psiz12[1])
+        psi2n = (psix12[2], psiy12[2], psiz12[2])
         return angle.(
-            conj(psi12[1]) * psi1n .+
-            conj(psi12[2]) * psi2n
-        ) * hbar
+            conj(psi12[1]) .* psi1n .+
+            conj(psi12[2]) .* psi2n
+        ) .* hbar
     end
 end
 function velocity_one_form!(isf, psi, hbar = 1.0f0)
     isf.velocity .= velocity_one_form.(
         isf.i,
         isf.i_shifted,
-        Scalar(psi),
+        (psi,),
         hbar
     )
 end
 
 
-function gauge_transform(psi, q)
-    eiq = exp(1.0im * (-q))
+
+@fastmath function gauge_transform(psi, q)
+    x = Complex64(0f0, 1f0) * (-q)
+    eiq = exp(x)
     (psi[1] * eiq, psi[2] * eiq)
 end
 
 function div(i, i2, velocity, res, ds)
-    x, y, z = i
-    ix, iy, iz = i2
+    x = i[1]; y = i[2]; z = i[3]
+    ix = i2[1]; iy = i2[2]; iz = i2[3]
     v1 = velocity[x, y,  z]
-    v2 = Vec(
+    v2 = (
         velocity[ix, y,  z][1],
         velocity[x,  iy, z][2],
         velocity[x,  y, iz][3]
     )
-    sum((v1 .- v2) .* ds)
+    t1 = v1 .- v2
+    t2 = t1 .* ds
+    sum(t2)
 end
 function div!(isf)
     isf.f .= div.(
         isf.i,
         isf.i_shifted2,
-        Scalar(isf.velocity),
-        Scalar(isf.grid_res),
-        Scalar(inv.(isf.d .^ 2f0))
+        (isf.velocity,),
+        (isf.grid_res,),
+        (inv.(isf.d .^ 2f0),)
     )
 end
 
@@ -171,8 +180,8 @@ end
 function schroedinger_flow!(isf, psi)
     # extract single psi values into tmp arrays stored in obj
     psi1 = isf.psi1; psi2 = isf.psi2
-    psi1 .= first.(psi)
-    psi2 .= last.(psi)
+    psi1 .= getindex.(psi, 1)
+    psi2 .= getindex.(psi, 2)
     isf.fftplan * psi1; isf.fftplan * psi2;
     psi1 .= (*).(psi1, isf.mask)
     psi2 .= (*).(psi2, isf.mask)
@@ -209,13 +218,13 @@ function staggered_advect!(particle, isf)
     gridsize = isf.physical_size
     particle .= staggered_advect.(
         particle,
-        Scalar((
+        ((
             velocity,
             isf.dt,
             isf.d,
             isf.physical_size,
             isf.grid_res
-        ))
+        ),)
     )
 end
 
