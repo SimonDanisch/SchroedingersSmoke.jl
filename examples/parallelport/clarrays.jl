@@ -32,7 +32,7 @@ end
 
 
 vol_size = (4,2,2)# box size
-dims = (100,100,100) # volume resolution
+dims = (64,32,32) # volume resolution
 hbar = 0.1f0      # Planck constant
 dt = 1f0/48f0     # time step
 
@@ -42,7 +42,7 @@ nozzle_len = 0.5f0
 nozzle_rad = 0.5f0
 n_particles = 50   # number of particles
 
-isf = ISF{Int, Float32}(vol_size, dims, hbar, dt);
+isf = ISF{UInt32, Float32}(vol_size, dims, hbar, dt);
 
 
 # initialize psi
@@ -84,3 +84,32 @@ end
     simloop(200, isf, psi, kvec, omega, isjetarr)
     GPUArrays.synchronize(psi)
 end
+
+
+
+
+
+
+particle = CLArray(map(x-> (rand(Float32), rand(Float32), rand(Float32)) .* (4f0, 2f0, 2f0), 1:10_000))
+@time begin
+    staggered_advect!(particle, isf)
+    GPUArrays.synchronize(particle)
+end
+
+gpu_call(particle, (velocity, isf.dt, isf.d, isf.physical_size, isf.grid_res)) do state, velo, dt, d, ps, gr
+    point = (0.5f0, 0.5f0, 0.5f0)
+    staggered_velocity(velo, point, d, ps, gr)
+    return
+end
+
+typename(CL)
+particle .= staggered_advect.(
+    particle,
+    (isf.velocity,),
+    ((
+        isf.dt,
+        isf.d,
+        isf.physical_size,
+        isf.grid_res
+    ),)
+)

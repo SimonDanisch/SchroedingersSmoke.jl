@@ -197,41 +197,27 @@ type Particles{FloatType, IntType}
 end
 Base.length(p::Particles) = length(p.active)
 
-
-function staggered_advect(p, args)
-    velocity, dt, d, gridsize, res = args
+function staggered_advect(p, velocity, args)
+    dt = args[1]; d = args[2]; gridsize = args[3]; res = args[4]
     k1 = staggered_velocity(velocity, p, d, gridsize, res)
 
-    k2 = p + k1 .* dt * 0.5f0
+    k2 = p .+ k1 .* dt .* 0.5f0
     k2 = staggered_velocity(velocity, k2, d, gridsize, res)
 
-    k3 = p + k2 .* dt * 0.5f0
+    k3 = p .+ k2 .* dt .* 0.5f0
     k3 = staggered_velocity(velocity, k3, d, gridsize, res)
 
-    k4 = p + k3 .* dt
+    k4 = p .+ k3 .* dt
     k4 = staggered_velocity(velocity, k4, d, gridsize, res)
 
-    p .+ dt/6f0 .* (k1 .+ 2f0*k2 .+ 2f0*k3 .+ k4)
-end
-function staggered_advect!(particle, isf)
-    velocity, dt, d, res = isf.velocity, isf.dt, isf.d, isf.grid_res
-    gridsize = isf.physical_size
-    particle .= staggered_advect.(
-        particle,
-        ((
-            velocity,
-            isf.dt,
-            isf.d,
-            isf.physical_size,
-            isf.grid_res
-        ),)
-    )
+    p .+ dt./6f0 .* (k1 .+ 2f0 .* k2 .+ 2f0 .* k3 .+ k4)
 end
 
+
 @inline function staggered_velocity(velocity, point, d, gs, res)
-    p   = mod.(Vec(point), gs)
-    i   = Vec{3, Int}(floor.(p ./ d)) + 1
-    ip  = mod.(i, res) + 1
+    p   = mod.(point, gs)
+    i   = UInt32.(floor.(p ./ d)) .+ UInt32(1)
+    ip  = mod.(i, res) .+ UInt32(1)
 
     v0  = velocity[i[1], i[2], i[3]]
 
@@ -239,21 +225,36 @@ end
     pyp = velocity[i[1], ip[2], i[3]]
     pzp = velocity[i[1], i[2], ip[3]]
 
-    vn = Vec3f0(
+    vn = (
         velocity[i[1], ip[2], ip[3]][1],
         velocity[ip[1], i[2], ip[3]][2],
         velocity[ip[1], ip[2], i[3]][3]
     )
-    pp  = Vec3f0(pyp[1], pxp[2], pxp[3])
-    pp2 = Vec3f0(pzp[1], pzp[2], pyp[3])
+    pp  = (pyp[1], pxp[2], pxp[3])
+    pp2 = (pzp[1], pzp[2], pyp[3])
 
-    w   = p - (i - 1) .* d
-    w1  = Vec3f0(w[3], w[3], w[2])
-    w2  = Vec3f0(w[2], w[1], w[1])
+    w   = p .- (i .- 1f0) .* d
+    w1  = (w[3], w[3], w[2])
+    w2  = (w[2], w[1], w[1])
 
-    return Point3f0(
-        (1 - w1) .* ((1 - w2) .* v0 + w2 .* pp) +
-        w1 .* ((1 - w2) .* pp2 + w2 .* vn)
+    return (
+        (1f0 .- w1) .* ((1f0 .- w2) .* v0 .+ w2 .* pp) .+
+        w1 .* ((1f0 .- w2) .* pp2 .+ w2 .* vn)
+    )
+end
+
+function staggered_advect!(particle, isf)
+    velocity, dt, d, res = isf.velocity, isf.dt, isf.d, isf.grid_res
+    gridsize = isf.physical_size
+    particle .= staggered_advect.(
+        particle,
+        (velocity,),
+        ((
+            isf.dt,
+            isf.d,
+            isf.physical_size,
+            isf.grid_res
+        ),)
     )
 end
 
