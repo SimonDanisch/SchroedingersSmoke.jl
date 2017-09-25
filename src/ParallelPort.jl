@@ -1,39 +1,37 @@
 module ParallelPort
 
-using StaticArrays, CLArrays
 const Vec{N, T} = NTuple{N, T}
 const Point{N, T} = NTuple{N, T}
-const Vec3f0 = NTuple{3, Float32}
-const Point3f0 = NTuple{3, Float32}
 
-const ArrayType = CLArray
-
-# lots of parameters. To lazy to write out types,
-# still don't want to waste performance
-type ISF{IntType, FloatType, FFTP, IFFTP}
+struct ISF{
+        IntType, FloatType,
+        # can't define the Types as e.g. ArrayType{FloatType, 3}, so we need them as type parameter and calculate the types in the constructor
+        CArray, FArray, VIArray, VFArray, # Complex array, Float array, Integer Vec array, Float Vec array
+        FFTP, IFFTP # types of the fft plan
+    }
 
     grid_res::Vec{3, IntType}
     physical_size::Vec{3, IntType}
     d::Vec{3, FloatType}
-    velocity::ArrayType{Vec{3, FloatType}, 3}
+    velocity::VFArray
 
     hbar::FloatType             # reduced Planck constant
     dt::FloatType               # time step
-    mask::ArrayType{Complex{FloatType}, 3} # Fourier coefficient for solving Schroedinger eq
+    mask::CArray # Fourier coefficient for solving Schroedinger eq
     # precalculated values
     # we have a couple of indices precalculated:
-    i::ArrayType{NTuple{3, IntType}, 3} # type is to complex to write down
-    i_shifted::ArrayType{Vec{3, IntType}, 3} # indices shifted by one
-    i_shifted2::ArrayType{Vec{3, IntType}, 3} # indices shifted by -2
+    i::VIArray # type is to complex to write down
+    i_shifted::VIArray # indices shifted by one
+    i_shifted2::VIArray # indices shifted by -2
 
     # other precalculated values
-    positions::ArrayType{Point{3, FloatType}, 3} # position on the grid
-    fac::ArrayType{Complex{FloatType}, 3}
+    positions::VFArray # position on the grid
+    fac::CArray
     # temporary allocations for intermediates
-    f::ArrayType{FloatType, 3}
-    fc::ArrayType{Complex{FloatType}, 3}
-    psi1::ArrayType{Complex{FloatType}, 3}
-    psi2::ArrayType{Complex{FloatType}, 3}
+    f::FArray
+    fc::CArray
+    psi1::CArray
+    psi2::CArray
     fftplan::FFTP
     ifftplan::IFFTP
 end
@@ -42,11 +40,12 @@ function Base.zero(::Type{NTuple{N, T}}) where {T, N}
     ntuple(x-> zero(T), Val{N})
 end
 
-function (::Type{ISF{IntType, FloatType}})(physical_size, dims, hbar, dt) where {IntType, FloatType}
-    VT = NTuple{3, FloatType}
-    grid_res = Vec(dims)
-    physical_size = Vec(physical_size)
-    d = VT(physical_size ./ grid_res)
+function (::Type{ISF{ArrayType, IntType, FloatType}})(physical_size, dims, hbar, dt) where {ArrayType, IntType, FloatType}
+    VF = Vec{3, FloatType}
+    VI = Vec{3, IntType}
+    grid_res = VI(dims)
+    physical_size = VI(physical_size)
+    d = VF(physical_size ./ grid_res)
     fac = zeros(Complex{FloatType}, dims)
     mask = zeros(Complex{FloatType}, dims)
     f = -4 * pi^2 * hbar
@@ -66,7 +65,7 @@ function (::Type{ISF{IntType, FloatType}})(physical_size, dims, hbar, dt) where 
     fac[1,1,1] = 0
 
     f = zeros(FloatType, dims)
-    velocity = zeros(VT, dims)
+    velocity = zeros(VF, dims)
 
     i = collect(((x, y, z) for x=1:dims[1], y=1:dims[2], z=1:dims[3]))
     i_shifted = map(i) do i
@@ -80,27 +79,27 @@ function (::Type{ISF{IntType, FloatType}})(physical_size, dims, hbar, dt) where 
     end
     fac_gpu = ArrayType(fac)
     p1, p2 = plan_fft!(fac_gpu), plan_ifft!(fac_gpu)
-    ISF{IntType, FloatType, typeof(p1), typeof(p2)}(
-        grid_res,
-        physical_size,
-        d,
+    ISF{
+            IntType, FloatType,
+            ArrayType{Complex{FloatType}, 3}, ArrayType{FloatType, 3},
+            ArrayType{VI, 3}, ArrayType{VF, 3},
+            typeof(p1), typeof(p2)
+        }(
+        grid_res, physical_size, d,
         velocity,
-        hbar,
-        dt,
+        hbar, dt,
         mask,
         i, i_shifted, i_shifted2,
         positions,
-        fac,
-        f,
-        complex.(f),
-        complex.(f),
-        complex.(f),
+        fac_gpu, f,
+        copy(fac_gpu), # temporaries
+        copy(fac_gpu),
+        copy(fac_gpu),
         p1, p2
     )
 end
 
 # helper function to have a map but with random index manipulations
-
 @inline function velocity_one_form(i, i2, psi, hbar)
     @inbounds begin
         psi12  = psi[i[1],  i[2],  i[3]]
@@ -115,6 +114,7 @@ end
         ) .* hbar
     end
 end
+
 function velocity_one_form!(isf, psi, hbar = 1.0f0)
     isf.velocity .= velocity_one_form.(
         isf.i,
@@ -123,7 +123,6 @@ function velocity_one_form!(isf, psi, hbar = 1.0f0)
         hbar
     )
 end
-
 
 
 @fastmath function gauge_transform(psi, q)
@@ -190,32 +189,38 @@ function schroedinger_flow!(isf, psi)
     psi
 end
 
-# simple statically allocated particle type
-type Particles{FloatType, IntType}
-    xyz::ArrayType{Point{3, FloatType}, 1}
-    active::ArrayType{IntType, 1}
+
+function in_grid(p, physical_size)
+    p[1] > 0.0f0 && p[1] < physical_size[1] || return false
+    p[2] > 0.0f0 && p[2] < physical_size[2] || return false
+    p[3] > 0.0f0 && p[3] < physical_size[3] || return false
+    true
 end
-Base.length(p::Particles) = length(p.active)
 
 function staggered_advect(p, velocity, args)
     dt = args[1]; d = args[2]; gridsize = args[3]; res = args[4]
-    k1 = staggered_velocity(velocity, p, d, gridsize, res)
+    if in_grid(p, gridsize)
 
-    k2 = p .+ k1 .* dt .* 0.5f0
-    k2 = staggered_velocity(velocity, k2, d, gridsize, res)
+        k1 = staggered_velocity(velocity, p, d, gridsize, res)
 
-    k3 = p .+ k2 .* dt .* 0.5f0
-    k3 = staggered_velocity(velocity, k3, d, gridsize, res)
+        k2 = p .+ k1 .* dt .* 0.5f0
+        k2 = staggered_velocity(velocity, k2, d, gridsize, res)
 
-    k4 = p .+ k3 .* dt
-    k4 = staggered_velocity(velocity, k4, d, gridsize, res)
+        k3 = p .+ k2 .* dt .* 0.5f0
+        k3 = staggered_velocity(velocity, k3, d, gridsize, res)
 
-    p .+ dt./6f0 .* (k1 .+ 2f0 .* k2 .+ 2f0 .* k3 .+ k4)
+        k4 = p .+ k3 .* dt
+        k4 = staggered_velocity(velocity, k4, d, gridsize, res)
+
+        p .+ dt./6f0 .* (k1 .+ 2f0 .* k2 .+ 2f0 .* k3 .+ k4)
+    else
+        (-1f0, -1f0, -1f0)
+    end
 end
 
 
-@inline function staggered_velocity(velocity, point, d, gs, res)
-    p   = mod.(point, gs)
+@inline function staggered_velocity(velocity, point, d, ph_size, res)
+    p   = mod.(point, ph_size)
     i   = UInt32.(floor.(p ./ d)) .+ UInt32(1)
     ip  = mod.(i, res) .+ UInt32(1)
 
@@ -252,41 +257,15 @@ function staggered_advect!(particle, isf)
         ((
             isf.dt,
             isf.d,
-            isf.physical_size,
+            gridsize,
             isf.grid_res
         ),)
     )
 end
 
 
-function Base.append!(p::Particles, xyz)
-    inserted = 0
-    for i = 1:length(p.xyz) # reuse freed up indices
-        if !(i in p.active)
-            inserted += 1
-            p.xyz[i] = xyz[inserted]
-            push!(p.active, i)
-        end
-        inserted == length(xyz) && return
-    end
-    sort!(p.active)
-    length(xyz) == inserted && return
-    # We have more particles than `gaps`, meaning all gaps should be filled
-    # and length(p.active) == last(p.active)
-    @assert isempty(p.active) || (length(p.active) == last(p.active)) # lets just make sure of this
-    rest = length(xyz) - inserted
-    newlen = length(p.active) + rest
-    if newlen > length(p.xyz)
-        # we don't grow particles for now. Statically allocated, Remember?
-        warn("Not all particles are inserted, limit reached")
-        newlen = length(p.xyz)
-    end
-    range = (length(p.active)+1):newlen
-    p.xyz[range] = view(xyz, (inserted+1):length(xyz))
-    append!(p.active, range)
-    return
-end
-
-
+export ISF, normalize_psi, pressure_project!
+export velocity_one_form!, schroedinger_flow!
+export Particles, staggered_advect!
 
 end

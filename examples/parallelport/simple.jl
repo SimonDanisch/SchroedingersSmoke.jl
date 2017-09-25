@@ -1,17 +1,9 @@
-Base.FFTW.set_num_threads(8)
-
-using SchroedingersSmoke
-import SchroedingersSmoke.ParallelPort
-using StaticArrays, Colors, GPUArrays
-import GeometryTypes
-import ParallelPort: ISF, normalize_psi, pressure_project!
-import ParallelPort: velocity_one_form!, schroedinger_flow!
-import ParallelPort: Particles, staggered_advect!
-import ParallelPort: Vec, Vec3f0, Point, Point3f0
-using BenchmarkTools
+using SchroedingersSmoke, CLArrays
+using SchroedingersSmoke.ParallelPort
+using Colors, GPUArrays
 
 vol_size = (4,2,2)# box size
-dims = (64*2,32*2,32*2) # volume resolution
+dims = (64, 32, 32) .* 2 # volume resolution
 hbar = 0.1f0      # Planck constant
 dt = 1f0/48f0     # time step
 
@@ -21,7 +13,11 @@ nozzle_len = 0.5f0
 nozzle_rad = 0.5f0
 n_particles = 500   # number of particles
 
-isf2 = ISF{UInt32, Float32}(vol_size, dims, hbar, dt);
+ArrayType = CLArray
+
+isf2 = ISF{ArrayType, UInt32, Float32}(vol_size, dims, hbar, dt);
+
+tuple_dot(a, b) = sum(a .+ b)
 
 # function returning true at nozzle position
 function isjet(p, nozzle_cen, nozzle_len, nozzle_rad)
@@ -33,7 +29,7 @@ end
 function restrict_kernel(psi, isjet, kvec, pos, omgterm)
     if isjet
         amp = abs.(psi)
-        phase = dot(kvec, pos) - omgterm
+        phase = tuple_dot(kvec, pos) - omgterm
         @fastmath amp .* exp(Complex64(0f0, 1f0) .* phase)
     else
         psi
@@ -45,7 +41,7 @@ function restrict_velocity!(isf, psi, kvec, isjetarr, omgterm = 0f0)
 end
 
 # initialize psi
-psi = CLArray([(one(Complex64), one(Complex64) * 0.01f0) for i=1:dims[1], j=1:dims[2], k=1:dims[3]]);
+psi = ArrayType([(one(Complex64), one(Complex64) * 0.01f0) for i=1:dims[1], j=1:dims[2], k=1:dims[3]]);
 
 psi .= normalize_psi.(psi);
 
@@ -58,21 +54,10 @@ for iter = 1:10
     pressure_project!(isf2, psi)
 end
 
-# psi2 ≈ last.(psi)#
 
-## SET PARTICLES
-# particle = Particles{Float32, Int}(
-#     JLArray(zeros(Point3f0, 100_000)), JLArray(Int[])
-# )
-particles =  CLArray(map(x-> (0f0, 0f0, 0f0), 1:100_000))
+particles = ArrayType(map(x-> (0f0, 0f0, 0f0), 1:100_000))
 
-function in_grid(i, particle = particle, isf = isf2)
-    p = particle.xyz[i]
-    p[1] > 0.1f0 && p[1] < isf.physical_size[1] || return false
-    p[2] > 0.1f0 && p[2] < isf.physical_size[2] || return false
-    p[3] > 0.1f0 && p[3] < isf.physical_size[3] || return false
-    true
-end
+
 newp = map(1:n_particles) do _
     rt = rand()*2*pi
     Float32.((
@@ -149,6 +134,6 @@ end
 
 
 @time simloop(
-    1000, isf2, psi, kvec, omega, n_particles, isjetarr,
+    200, isf2, psi, kvec, omega, n_particles, isjetarr,
     nozzle_rad, nozzle_cen, particles, particle_vis
 )
