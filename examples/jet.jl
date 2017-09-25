@@ -1,5 +1,4 @@
 using SchroedingersSmoke, CLArrays
-using SchroedingersSmoke.ParallelPort
 using Colors, GPUArrays
 
 vol_size = (4,2,2)# box size
@@ -11,34 +10,11 @@ jet_velocity = (1f0, 0f0, 0f0)
 nozzle_cen = Float32.((2-1.7, 1-0.034, 1+0.066))
 nozzle_len = 0.5f0
 nozzle_rad = 0.5f0
-n_particles = 500   # number of particles
+n_particles = 1000   # number of particles
 
 ArrayType = CLArray
 
 isf2 = ISF{ArrayType, UInt32, Float32}(vol_size, dims, hbar, dt);
-
-tuple_dot(a, b) = sum(a .+ b)
-
-# function returning true at nozzle position
-function isjet(p, nozzle_cen, nozzle_len, nozzle_rad)
-    (abs(p[1] - nozzle_cen[1]) <= nozzle_len / 2) &
-    ((p[2] - nozzle_cen[2])^2 +
-    (p[3] - nozzle_cen[3])^2 <= nozzle_rad .^ 2) != 0
-end
-
-function restrict_kernel(psi, isjet, kvec, pos, omgterm)
-    if isjet
-        amp = abs.(psi)
-        phase = tuple_dot(kvec, pos) - omgterm
-        @fastmath amp .* exp(Complex64(0f0, 1f0) .* phase)
-    else
-        psi
-    end
-end
-
-function restrict_velocity!(isf, psi, kvec, isjetarr, omgterm = 0f0)
-    psi .= restrict_kernel.(psi, isjetarr, (kvec,), isf.positions, omgterm)
-end
 
 # initialize psi
 psi = ArrayType([(one(Complex64), one(Complex64) * 0.01f0) for i=1:dims[1], j=1:dims[2], k=1:dims[3]]);
@@ -55,18 +31,10 @@ for iter = 1:10
 end
 
 
-particles = ArrayType(map(x-> (0f0, 0f0, 0f0), 1:100_000))
+particles = ArrayType(map(x-> (0f0, 0f0, 0f0), 1:(10^6) * 3))
 
+add_particles!(particles, 1:n_particles, nozzle_cen, nozzle_rad)
 
-newp = map(1:n_particles) do _
-    rt = rand()*2*pi
-    Float32.((
-        nozzle_cen[1] - 0.1,
-        nozzle_cen[2] + 0.9 * nozzle_rad * cos(rt),
-        nozzle_cen[3] + 0.9 * nozzle_rad * sin(rt)
-    ))
-end;
-particles[1:n_particles] = newp
 
 using GLVisualize;
 w = glscreen(color = RGBA(0f0, 0f0, 0f0, 0f0));
@@ -74,13 +42,14 @@ w = glscreen(color = RGBA(0f0, 0f0, 0f0, 0f0));
 particle_vis = visualize(
     (GeometryTypes.Circle(GeometryTypes.Point2f0(0), 0.002f0), GeometryTypes.Point3f0.(Array(particles))),
     boundingbox = nothing, # don't waste time on bb computation
-    color = collect(linspace(RGBA{Float32}(1,1,1,0.4), RGBA{Float32}(((243, 123, 173)./255)...,0.4), length(particles))),
+    color = fill(RGBA{Float32}(0, 0, 0, 0.09), length(particles)),
     billboard = true
 ).children[]
 _view(particle_vis, camera = :perspective)
-
-# velocity_vis = glplot(GeometryTypes.Vec3f0.(isf.velocity)).children[]
-
+particle_vis[:color][1:n_particles] = map(1:n_particles) do i
+    xx = (i / n_particles) * 2pi
+    RGBA{Float32}((sin(xx) + 1) / 2, (cos(xx) + 1.0) / 2.0, iter / N, 0.1)
+end
 function simloop(
         N, isf, psi, kvec, omega, n_particles, isjetarr,
         nozzle_rad, nozzle_cen, particle, particle_vis
@@ -94,29 +63,13 @@ function simloop(
         psi .= normalize_psi.(psi)
         pressure_project!(isf, psi)
 
-        newp = map(1:n_particles) do _
-            rt = rand()*2*pi
-            offset = ((rand(Float32), rand(Float32), rand(Float32)) .* 0.01f0) .- 0.005f0
-            Float32.((
-                nozzle_cen[1] - 0.1,
-                nozzle_cen[2] + 0.9 * nozzle_rad * cos(rt),
-                nozzle_cen[3] + 0.9 * nozzle_rad * sin(rt)
-            )) .+ offset
-        end
-        start = mod((iter - 1) * n_particles + 1, length(particles))
+        start = mod((iter - 1) * n_particles + 1, length(particle))
         stop = start + n_particles - 1
-        particle[start:stop] = newp
-        broadcast!(particle, particle, (isf.physical_size,)) do p, ps
-            if p[1] > 0.1f0 && p[1] < ps[1] ||
-                    p[2] > 0.1f0 && p[2] < ps[2] ||
-                    p[3] > 0.1f0 && p[3] < ps[3]
-                p
-            else
-                (0f0, 0f0, 0f0)
-            end
+        add_particles!(particle, start:stop, nozzle_cen, nozzle_rad)
+        particle_vis[:color][start:stop] = map(1:n_particles) do i
+            xx = (i / n_particles) * 2pi
+            RGBA{Float32}((sin(xx) + 1) / 2, (cos(xx) + 1.0) / 2.0, iter / N, 0.1)
         end
-
-
         # constrain velocity
         restrict_velocity!(isf, psi, kvec, isjetarr, omega*t)
         pressure_project!(isf, psi)
@@ -128,12 +81,24 @@ function simloop(
 
         #TODO only update active particles
         GLAbstraction.set_arg!(particle_vis, :position, reinterpret(GeometryTypes.Point3f0, Array(particle)))
+
         yield()
     end
 end
 
-
 @time simloop(
-    200, isf2, psi, kvec, omega, n_particles, isjetarr,
+    300, isf2, psi, kvec, omega, n_particles, isjetarr,
     nozzle_rad, nozzle_cen, particles, particle_vis
 )
+
+iter = 1
+
+N = 300
+
+start = mod((iter - 1) * n_particles + 1, length(particles))
+stop = start + n_particles - 1
+xx = map(1:n_particles) do i
+    xx = (i / n_particles) * 2pi
+    RGBA{U8}((sin(xx) + 1) / 2, (cos(xx) + 1.0) / 2.0, iter / N, 0.1)
+end
+xx[2000]

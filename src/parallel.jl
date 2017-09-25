@@ -1,5 +1,3 @@
-module ParallelPort
-
 const Vec{N, T} = NTuple{N, T}
 const Point{N, T} = NTuple{N, T}
 
@@ -267,5 +265,3 @@ end
 export ISF, normalize_psi, pressure_project!
 export velocity_one_form!, schroedinger_flow!
 export Particles, staggered_advect!
-
-end
