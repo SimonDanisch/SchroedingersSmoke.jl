@@ -1,12 +1,3 @@
-if (
-        get(ENV, "TRAVIS", "") == "true" ||
-        get(ENV, "APPVEYOR", "") == "true" ||
-        get(ENV, "CI", "") == "true"
-    )
-    Pkg.clone("GPUArrays")
-    Pkg.checkout("GPUArrays", "sd/abstractgpu")
-end
-
 using SchroedingersSmoke, CLArrays
 using Colors
 
@@ -21,7 +12,7 @@ nozzle_len = 0.5f0
 nozzle_rad = 0.5f0
 n_particles = 1000   # number of particles
 
-ArrayType = Array
+ArrayType = CLArray
 
 isf2 = ISF{ArrayType, UInt32, Float32}(vol_size, dims, hbar, dt);
 
