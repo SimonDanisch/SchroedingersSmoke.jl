@@ -2,7 +2,7 @@ using SchroedingersSmoke, CLArrays
 using Colors
 
 vol_size = (4,2,2)# box size
-dims = (64, 32, 32) .* 2 # volume resolution
+dims = (64, 32, 32) .* 4 # volume resolution
 hbar = 0.1f0      # Planck constant
 dt = 1f0/48f0     # time step
 
@@ -31,7 +31,7 @@ for iter = 1:10
 end
 
 # add out of bounds particles
-particles = ArrayType(map(x-> (-1f0, -1f0, -1f0), 1:100_000))
+particles = ArrayType(map(x-> (-1f0, -1f0, -1f0), 1:10^6))
 
 
 
