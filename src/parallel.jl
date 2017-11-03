@@ -97,7 +97,6 @@ function (::Type{ISF{ArrayType, IntType, FloatType}})(physical_size, dims, hbar,
     )
 end
 
-# helper function to have a map but with random index manipulations
 @inline function velocity_one_form(i, i2, psi, hbar)
     @inbounds begin
         psi12  = psi[i[1],  i[2],  i[3]]
