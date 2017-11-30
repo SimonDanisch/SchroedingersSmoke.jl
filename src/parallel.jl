@@ -38,7 +38,7 @@ function Base.zero(::Type{NTuple{N, T}}) where {T, N}
     ntuple(x-> zero(T), Val{N})
 end
 
-function (::Type{ISF{ArrayType, IntType, FloatType}})(physical_size, dims, hbar, dt) where {ArrayType, IntType, FloatType}
+function ISF{ArrayType, IntType, FloatType}(physical_size, dims, hbar, dt) where {ArrayType, IntType, FloatType}
     VF = Vec{3, FloatType}
     VI = Vec{3, IntType}
     grid_res = VI(dims)

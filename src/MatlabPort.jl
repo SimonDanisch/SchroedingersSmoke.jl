@@ -20,7 +20,7 @@ function ndgrid_fill(a, v, s, snext)
         a[j] = v[div(rem(j-1, snext), s)+1]
     end
 end
-function ndgrid{T}(vs::AbstractVector{T}...)
+function ndgrid(vs::AbstractVector{T}...) where T
     n = length(vs)
     sz = map(length, vs)
     out = ntuple(i->Array{T}(sz), n)
@@ -35,7 +35,7 @@ function ndgrid{T}(vs::AbstractVector{T}...)
     out
 end
 
-type ISF
+mutable struct ISF
     px::Array{Float64,3}; py::Array{Float64,3}; pz::Array{Float64,3}          # coordinates of grid points
     ix::UnitRange{Int}; iy::UnitRange{Int}; iz::UnitRange{Int}          # 1D index array
     iix::Array{Int, 3}; iiy::Array{Int, 3}; iiz::Array{Int, 3}         # 3D index array
@@ -175,7 +175,7 @@ end
  field on a TorusDEC grid, using RK4 method.
  Velocities are trilinearly interpolated.
 """
-type Particles
+mutable struct Particles
     x::Vector{Float32}
     y::Vector{Float32}
     z::Vector{Float32} # array of positions
