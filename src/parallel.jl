@@ -160,7 +160,7 @@ function pressure_project!(isf, psi)
 end
 
 function normalize_psi(psi)
-    norm = hypot(abs(psi[1]), abs(psi[2]))
+    norm = @fastmath hypot(abs(psi[1]), abs(psi[2]))
     (psi[1] / norm, psi[2] / norm)
 end
 @inline twotuple(a, b) = (a, b)

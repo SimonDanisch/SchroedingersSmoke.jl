@@ -14,7 +14,7 @@ end
 
 function restrict_kernel(psi, isjet, kvec, pos, omgterm)
     if isjet
-        amp = abs.(psi)
+        amp = @fastmath abs.(psi)
         phase = tuple_dot(kvec, pos) - omgterm
         @fastmath amp .* exp(Complex64(0f0, 1f0) .* phase)
     else
