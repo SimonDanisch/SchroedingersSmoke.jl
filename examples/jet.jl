@@ -48,7 +48,7 @@ particle_vis = visualize(
 _view(particle_vis, camera = :perspective)
 particle_vis[:color][1:n_particles] = map(1:n_particles) do i
     xx = (i / n_particles) * 2pi
-    RGBA{Float32}((sin(xx) + 1) / 2, (cos(xx) + 1.0) / 2.0, iter / N, 0.1)
+    RGBA{Float32}((sin(xx) + 1) / 2, (cos(xx) + 1.0) / 2.0, 0.0, 0.1)
 end
 function simloop(
         N, isf, psi, kvec, omega, n_particles, isjetarr,
@@ -90,15 +90,3 @@ end
     300, isf2, psi, kvec, omega, n_particles, isjetarr,
     nozzle_rad, nozzle_cen, particles, particle_vis
 )
-
-iter = 1
-
-N = 300
-
-start = mod((iter - 1) * n_particles + 1, length(particles))
-stop = start + n_particles - 1
-xx = map(1:n_particles) do i
-    xx = (i / n_particles) * 2pi
-    RGBA{U8}((sin(xx) + 1) / 2, (cos(xx) + 1.0) / 2.0, iter / N, 0.1)
-end
-xx[2000]
