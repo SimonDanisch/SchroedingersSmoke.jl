@@ -1,5 +1,4 @@
 using SchroedingersSmoke
-using Colors
 
 vol_size = (4,2,2)# box size
 dims = (64, 32, 32) .* 2 # volume resolution
