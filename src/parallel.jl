@@ -97,7 +97,6 @@ function (::Type{ISF{ArrayType, IntType, FloatType}})(physical_size, dims, hbar,
     )
 end
 
-# helper function to have a map but with random index manipulations
 @inline function velocity_one_form(i, i2, psi, hbar)
     @inbounds begin
         psi12  = psi[i[1],  i[2],  i[3]]
@@ -161,7 +160,7 @@ function pressure_project!(isf, psi)
 end
 
 function normalize_psi(psi)
-    norm = hypot(abs(psi[1]), abs(psi[2]))
+    norm = @fastmath hypot(abs(psi[1]), abs(psi[2]))
     (psi[1] / norm, psi[2] / norm)
 end
 @inline twotuple(a, b) = (a, b)
