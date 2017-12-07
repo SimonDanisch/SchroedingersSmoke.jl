@@ -1,6 +1,3 @@
-using GPUArrays
-using GPUArrays: gpu_rand
-
 tuple_dot(a, b) = sum(a .+ b)
 
 """

@@ -1,14 +1,4 @@
-if (
-        get(ENV, "TRAVIS", "") == "true" ||
-        get(ENV, "APPVEYOR", "") == "true" ||
-        get(ENV, "CI", "") == "true"
-    )
-    Pkg.clone("GPUArrays")
-    Pkg.checkout("GPUArrays", "sd/abstractgpu")
-end
-
-using SchroedingersSmoke, CLArrays
-using Colors
+using SchroedingersSmoke
 
 vol_size = (4,2,2)# box size
 dims = (64, 32, 32) .* 2 # volume resolution
@@ -77,6 +67,6 @@ end
 
 
 @time simloop(
-    50, isf2, psi, kvec, omega, n_particles, isjetarr,
+    3, isf2, psi, kvec, omega, n_particles, isjetarr,
     nozzle_rad, nozzle_cen, particles
 )
